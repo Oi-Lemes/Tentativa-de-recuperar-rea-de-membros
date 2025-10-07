@@ -15,26 +15,32 @@ export default function LoginPage() {
     event.preventDefault(); // Impede que a página recarregue ao enviar o formulário
     setMessage(''); // Limpa mensagens antigas
 
-    // Enviando os dados para o nosso backend!
-    const response = await fetch('http://localhost:3001/login', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-     body: JSON.stringify({ email: email, senha: password }),
-    });
+    try {
+        // Enviando os dados para o nosso backend!
+        const response = await fetch('http://localhost:3001/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          // CORREÇÃO AQUI: O campo da senha agora é 'password' para bater com o backend
+          body: JSON.stringify({ email: email, password: password }),
+        });
 
-    const data = await response.json();
+        const data = await response.json();
 
-    if (response.ok) {
-      // Se o login for bem-sucedido
-      console.log("Login com sucesso!", data);
-      setMessage(`Login bem-sucedido! Seu token é: ${data.token}`);
-      // No futuro, salvaremos o token e redirecionaremos o usuário
-    } else {
-      // Se o login falhar
-      console.error("Erro no login:", data);
-      setMessage(`Erro: ${data.message}`);
+        if (response.ok) {
+          // Se o login for bem-sucedido
+          console.log("Login com sucesso!", data);
+          setMessage(`Login bem-sucedido! Seu token é: ${data.token}`);
+          // No futuro, salvaremos o token e redirecionaremos o usuário
+        } else {
+          // Se o login falhar
+          console.error("Erro no login:", data);
+          setMessage(`Erro: ${data.message || 'Ocorreu um erro.'}`);
+        }
+    } catch (error) {
+        console.error("Falha na comunicação com o servidor:", error);
+        setMessage("Erro de conexão: Não foi possível se comunicar com o servidor.");
     }
   };
 
