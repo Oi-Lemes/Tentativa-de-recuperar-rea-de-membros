@@ -1,14 +1,14 @@
 "use client";
 
 import { useState } from "react";
-// Importamos o 'useRouter' para podermos fazer o redirecionamento
+// NOVIDADE: Importamos o 'useRouter' para podermos fazer o redirecionamento
 import { useRouter } from 'next/navigation';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
-  // Inicializamos o router
+  // NOVIDADE: Inicializamos o router
   const router = useRouter();
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -21,30 +21,27 @@ export default function LoginPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        // Enviando 'password' como o backend espera
         body: JSON.stringify({ email: email, password: password }),
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        // LÓGICA CORRIGIDA:
-        console.log("Login com sucesso! Redirecionando...", data);
+        console.log("Login com sucesso!", data);
         
-        // 1. Salvamos o token no localStorage do navegador
+        // NOVIDADE: Salvamos o token no localStorage do navegador
         localStorage.setItem('token', data.token);
 
-        // 2. Redirecionamos o usuário para o dashboard
+        // NOVIDADE: Redirecionamos o usuário para o dashboard
         router.push('/dashboard');
 
       } else {
-        // Se o login falhar
         console.error("Erro no login:", data);
         setMessage(`Erro: ${data.message || 'Ocorreu um erro.'}`);
       }
     } catch (error) {
-        console.error("Falha na comunicação com o servidor:", error);
-        setMessage("Erro de conexão: Não foi possível se comunicar com o servidor.");
+      console.error("Falha na comunicação com o servidor:", error);
+      setMessage("Erro de conexão: Não foi possível se comunicar com o servidor.");
     }
   };
 
