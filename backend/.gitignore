@@ -1,0 +1,30 @@
+node_modules
+# Keep environment variables out of version control
+.env
+
+/generated/prisma
+
+# Dependências
+node_modules/
+
+# Builds
+dist/
+build/
+.next/
+out/
+
+# Logs
+*.log
+
+# Variáveis de ambiente
+.env
+.env.local
+
+# Arquivos grandes
+*.zip
+*.db
+
+# Sistema
+.DS_Store
+Thumbs.db
+
