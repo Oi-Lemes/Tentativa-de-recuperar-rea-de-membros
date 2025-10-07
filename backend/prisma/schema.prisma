@@ -18,6 +18,6 @@ model User {
 }
 
 datasource db {
-  provider = "sqlite" // <-- MUDAR AQUI
+  provider = "postgresql" // <-- MUDANÇA FEITA AQUI
   url      = env("DATABASE_URL")
 }
