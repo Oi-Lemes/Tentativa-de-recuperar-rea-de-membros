@@ -8,16 +8,42 @@ generator client {
   provider = "prisma-client-js"
 }
 
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
 // Mapa do nosso Banco de Dados
 
 model User {
   id        Int      @id @default(autoincrement())
-  email     String   @unique // Diz que cada email deve ser único
+  email     String   @unique
   senha     String
-  createdAt DateTime @default(now()) // Guarda a data de criação automaticamente
+  createdAt DateTime @default(now())
+  progresso ProgressoAula[]
 }
 
-datasource db {
-  provider = "postgresql" // <-- MUDANÇA FEITA AQUI
-  url      = env("DATABASE_URL")
+model Modulo {
+  id          Int     @id @default(autoincrement())
+  title       String
+  description String
+  aulas       Aula[]
+}
+
+model Aula {
+  id       Int      @id @default(autoincrement())
+  title    String
+  modulo   Modulo   @relation(fields: [moduloId], references: [id])
+  moduloId Int
+  usuariosQueConcluiram ProgressoAula[]
+}
+
+model ProgressoAula {
+  user      User     @relation(fields: [userId], references: [id])
+  userId    Int
+  aula      Aula     @relation(fields: [aulaId], references: [id])
+  aulaId    Int
+  completedAt DateTime @default(now())
+
+  @@id([userId, aulaId]) // Chave primária composta
 }

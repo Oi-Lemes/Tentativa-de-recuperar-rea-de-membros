@@ -7,6 +7,21 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
 
+// --- Middleware de Autenticação ---
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (token == null) return res.sendStatus(401); // Se não há token, não autorizado
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    if (err) return res.sendStatus(403); // Se o token não for válido, acesso proibido
+    req.user = user;
+    next();
+  });
+};
+
+
 // Criamos uma função principal 'async' para poder usar try/catch na inicialização
 async function main() {
   try {
@@ -88,6 +103,70 @@ async function main() {
       }
     });
 
+    // --- ROTAS DE CONTEÚDO (PROTEGIDAS) ---
+
+    app.get('/modulos', authenticateToken, async (req, res) => {
+        const modulos = await prisma.modulo.findMany({
+            include: { aulas: { select: { id: true } } }, // Inclui apenas os IDs das aulas
+        });
+        res.json(modulos);
+    });
+
+    app.get('/modulos/:id', authenticateToken, async (req, res) => {
+        const { id } = req.params;
+        const modulo = await prisma.modulo.findUnique({
+            where: { id: parseInt(id) },
+            include: { aulas: true },
+        });
+        if (!modulo) {
+            return res.status(404).json({ message: 'Módulo não encontrado' });
+        }
+        res.json(modulo);
+    });
+    
+    // --- ROTAS DE PROGRESSO (PROTEGIDAS) ---
+
+    // Retorna um array com os IDs das aulas concluídas pelo usuário
+    app.get('/progresso', authenticateToken, async (req, res) => {
+        const progresso = await prisma.progressoAula.findMany({
+            where: { userId: req.user.id },
+            select: { aulaId: true },
+        });
+        res.json(progresso.map(p => p.aulaId));
+    });
+
+    // Marca uma aula como concluída ou desmarca
+    app.post('/progresso/aula/:aulaId', authenticateToken, async (req, res) => {
+        const { aulaId } = req.params;
+        const userId = req.user.id;
+
+        try {
+            const jaConcluida = await prisma.progressoAula.findUnique({
+                where: { userId_aulaId: { userId, aulaId: parseInt(aulaId) } },
+            });
+
+            if (jaConcluida) {
+                // Se já concluiu, desmarca (remove o registro)
+                await prisma.progressoAula.delete({
+                    where: { userId_aulaId: { userId, aulaId: parseInt(aulaId) } },
+                });
+                res.json({ message: 'Aula desmarcada como concluída.' });
+            } else {
+                // Se não concluiu, marca (cria o registro)
+                await prisma.progressoAula.create({
+                    data: {
+                        userId: userId,
+                        aulaId: parseInt(aulaId),
+                    },
+                });
+                res.json({ message: 'Aula marcada como concluída.' });
+            }
+        } catch (error) {
+            console.error("Erro ao atualizar progresso:", error);
+            res.status(500).json({ message: 'Erro ao atualizar progresso.' });
+        }
+    });
+    
     // --- LÓGICA DOS WEBHOOKS (PASSO 16) ---
 
     // Webhook para COMPRA APROVADA

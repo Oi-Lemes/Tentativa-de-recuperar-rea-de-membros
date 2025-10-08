@@ -3,9 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { modulos } from '../../data/modulos'; // Importando os dados
 
-// Componente para o Círculo de Progresso
+// Componente para o Círculo de Progresso (sem alterações)
 const ProgressCircle = ({ percentage }: { percentage: number }) => {
     const strokeWidth = 8;
     const radius = 60;
@@ -13,7 +12,6 @@ const ProgressCircle = ({ percentage }: { percentage: number }) => {
     const circumference = normalizedRadius * 2 * Math.PI;
     const strokeDashoffset = circumference - (percentage / 100) * circumference;
   
-    // Muda de cor com base na porcentagem
     const getColor = () => {
         if (percentage < 33) return '#f56565'; // Vermelho
         if (percentage < 66) return '#ecc94b'; // Amarelo
@@ -50,41 +48,65 @@ export default function AdminLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const [aulasConcluidas, setAulasConcluidas] = useState<number[]>([]);
+  const [progressoTotal, setProgressoTotal] = useState(0);
 
-  const totalAulas = modulos.reduce((acc, modulo) => acc + modulo.aulas.length, 0);
+  // Função para buscar dados de progresso da API
+  const fetchProgressData = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+        router.push('/');
+        return;
+    }
 
-  const calcularProgressoTotal = (concluidas: number[]) => {
-    if (totalAulas === 0) return 0;
-    return (concluidas.length / totalAulas) * 100;
-  };
+    try {
+        const [modulosRes, progressoRes] = await Promise.all([
+            fetch('http://localhost:3001/modulos', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            }),
+            fetch('http://localhost:3001/progresso', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            })
+        ]);
 
-  const progressoTotal = calcularProgressoTotal(aulasConcluidas);
+        if (!modulosRes.ok || !progressoRes.ok) {
+            // Se o token for inválido, desloga o usuário
+            localStorage.removeItem('token');
+            router.push('/');
+            return;
+        }
 
-  // Função para atualizar o estado com base no localStorage
-  const atualizarProgresso = () => {
-    const progressoSalvo = localStorage.getItem('progressoAulas');
-    if (progressoSalvo) {
-      setAulasConcluidas(JSON.parse(progressoSalvo));
+        const modulos = await modulosRes.json();
+        const aulasConcluidasIds = await progressoRes.json();
+
+        const totalAulas = modulos.reduce((acc: number, modulo: any) => acc + modulo.aulas.length, 0);
+
+        if (totalAulas > 0) {
+            const percentage = (aulasConcluidasIds.length / totalAulas) * 100;
+            setProgressoTotal(percentage);
+        } else {
+            setProgressoTotal(0);
+        }
+
+    } catch (error) {
+        console.error("Erro ao buscar progresso total:", error);
     }
   };
 
   useEffect(() => {
-    // Lógica de proteção da rota
     const token = localStorage.getItem('token');
     if (!token) {
       router.push('/');
+    } else {
+        fetchProgressData();
     }
     
-    // Carrega o progresso inicial
-    atualizarProgresso();
-
     // Adiciona um "ouvinte" para quando o progresso for alterado em outra página
-    window.addEventListener('storage', atualizarProgresso);
+    // Isso fará com que o círculo de progresso atualize em tempo real
+    window.addEventListener('storage', fetchProgressData);
 
     // Limpa o "ouvinte" quando o componente for desmontado
     return () => {
-      window.removeEventListener('storage', atualizarProgresso);
+      window.removeEventListener('storage', fetchProgressData);
     };
   }, [router]);
   

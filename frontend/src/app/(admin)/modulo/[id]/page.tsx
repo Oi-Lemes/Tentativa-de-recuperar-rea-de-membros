@@ -3,22 +3,54 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { modulos } from '../../../../data/modulos'; // <-- Vai passar a usar o ficheiro central
+
+// Tipos para os dados da API
+interface Aula {
+  id: number;
+  title: string;
+}
+interface Modulo {
+  id: number;
+  title: string;
+  description: string;
+  aulas: Aula[];
+}
 
 export default function ModuloPage() {
   const params = useParams();
   const { id } = params;
 
+  const [modulo, setModulo] = useState<Modulo | null>(null);
   const [aulasConcluidas, setAulasConcluidas] = useState<number[]>([]);
 
   useEffect(() => {
-    const progressoSalvo = localStorage.getItem('progressoAulas');
-    if (progressoSalvo) {
-      setAulasConcluidas(JSON.parse(progressoSalvo));
-    }
-  }, []);
+    if (!id) return;
+    
+    const fetchData = async () => {
+      const token = localStorage.getItem('token');
+      if (!token) return;
 
-  const modulo = modulos.find(m => m.id.toString() === id);
+      try {
+        const [moduloRes, progressoRes] = await Promise.all([
+          fetch(`http://localhost:3001/modulos/${id}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          }),
+          fetch('http://localhost:3001/progresso', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          })
+        ]);
+
+        const moduloData = await moduloRes.json();
+        const progressoData = await progressoRes.json();
+
+        setModulo(moduloData);
+        setAulasConcluidas(progressoData);
+      } catch (error) {
+        console.error("Erro ao buscar dados do módulo:", error);
+      }
+    };
+    fetchData();
+  }, [id]);
   
   if (!modulo) {
     return (
@@ -43,7 +75,6 @@ export default function ModuloPage() {
             {modulo.aulas.map((aula, index) => {
               const isConcluida = aulasConcluidas.includes(aula.id);
               return (
-                // LIGAÇÃO CORRIGIDA: Agora aponta para a página da aula correta
                 <Link 
                   key={aula.id} 
                   href={`/modulo/${modulo.id}/aula/${aula.id}`}

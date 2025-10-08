@@ -3,46 +3,87 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { modulos } from '../../../../../data/modulos';
+
+// Tipos
+interface Aula {
+  id: number;
+  title: string;
+}
+interface Modulo {
+  id: number;
+  title: string;
+  aulas: Aula[];
+}
 
 export default function AulaPage() {
   const params = useParams();
   const router = useRouter();
   const { id: moduleId, aulaId } = params;
 
+  // Estado local para dados da API
+  const [modulo, setModulo] = useState<Modulo | null>(null);
   const [aulasConcluidas, setAulasConcluidas] = useState<number[]>([]);
 
   useEffect(() => {
-    const progressoSalvo = localStorage.getItem('progressoAulas');
-    if (progressoSalvo) {
-      setAulasConcluidas(JSON.parse(progressoSalvo));
-    }
-  }, []);
+    const fetchData = async () => {
+        const token = localStorage.getItem('token');
+        if (!token || !moduleId) return;
+        
+        try {
+            const [moduloRes, progressoRes] = await Promise.all([
+                fetch(`http://localhost:3001/modulos/${moduleId}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                }),
+                fetch('http://localhost:3001/progresso', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                })
+            ]);
+            setModulo(await moduloRes.json());
+            setAulasConcluidas(await progressoRes.json());
+        } catch (error) {
+            console.error("Erro ao buscar dados da aula:", error);
+        }
+    };
+    fetchData();
+  }, [moduleId]);
 
-  const moduloIndex = modulos.findIndex(m => m.id.toString() === moduleId);
-  const modulo = modulos[moduloIndex];
-  const aula = modulo?.aulas.find(a => a.id.toString() === aulaId);
+  // Derivação de estado
+  const aulaAtual = modulo?.aulas.find(a => a.id.toString() === aulaId);
   const aulaIndex = modulo?.aulas.findIndex(a => a.id.toString() === aulaId);
 
-  if (!modulo || !aula || aulaIndex === undefined) {
+  if (!modulo || !aulaAtual || aulaIndex === undefined) {
     return <div>Aula não encontrada.</div>;
   }
   
   const isUltimaAulaDoModulo = aulaIndex === modulo.aulas.length - 1;
-  const proximoModulo = modulos[moduloIndex + 1];
-  const isConcluida = aulasConcluidas.includes(aula.id);
+  const proximoModuloId = parseInt(moduleId as string, 10) + 1; // Simplificado
+  const isConcluida = aulasConcluidas.includes(aulaAtual.id);
 
-  const handleMarcarComoConcluida = () => {
-    let progressoAtualizado;
-    if (isConcluida) {
-      progressoAtualizado = aulasConcluidas.filter(id => id !== aula.id);
-    } else {
-      progressoAtualizado = [...aulasConcluidas, aula.id];
+  const handleMarcarComoConcluida = async () => {
+    const token = localStorage.getItem('token');
+    if(!token) return;
+
+    try {
+        await fetch(`http://localhost:3001/progresso/aula/${aulaAtual.id}`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+        });
+
+        // Atualiza o estado local para refletir a mudança imediatamente
+        let progressoAtualizado;
+        if (isConcluida) {
+            progressoAtualizado = aulasConcluidas.filter(id => id !== aulaAtual.id);
+        } else {
+            progressoAtualizado = [...aulasConcluidas, aulaAtual.id];
+        }
+        setAulasConcluidas(progressoAtualizado);
+
+        // Dispara um evento para o layout atualizar o progresso total
+        window.dispatchEvent(new Event('storage'));
+
+    } catch (error) {
+        console.error("Erro ao marcar aula como concluída:", error);
     }
-    setAulasConcluidas(progressoAtualizado);
-    localStorage.setItem('progressoAulas', JSON.stringify(progressoAtualizado));
-    // Dispara um evento para que o layout possa atualizar o progresso total
-    window.dispatchEvent(new Event('storage'));
   };
 
   const handleProximo = () => {
@@ -52,12 +93,9 @@ export default function AulaPage() {
         router.push(`/modulo/${moduleId}/aula/${proximaAula.id}`);
     } 
     // Se for a última aula e houver um próximo módulo, vai para o próximo módulo
-    else if (proximoModulo) {
-        router.push(`/modulo/${proximoModulo.id}`);
-    } 
-    // Se for a última aula do último módulo, volta para o dashboard
     else {
-        router.push('/dashboard');
+        // Esta lógica pode ser melhorada para verificar se o próximo módulo realmente existe
+        router.push(`/modulo/${proximoModuloId}`);
     }
   };
 
@@ -70,7 +108,7 @@ export default function AulaPage() {
       </nav>
 
       <header className="mb-6">
-        <h1 className="text-4xl font-bold">{aula.title}</h1>
+        <h1 className="text-4xl font-bold">{aulaAtual.title}</h1>
       </header>
       
       <main className="space-y-6">
@@ -80,7 +118,6 @@ export default function AulaPage() {
           </div>
         </div>
 
-        {/* Mensagem de Parabéns ao concluir a última aula */}
         {isUltimaAulaDoModulo && isConcluida && (
             <div className="bg-green-900/50 border border-green-700 text-green-300 px-4 py-3 rounded-lg text-center">
                 <h3 className="font-bold text-lg">Parabéns!</h3>
@@ -104,7 +141,7 @@ export default function AulaPage() {
                 onClick={handleProximo}
                 className="w-full sm:w-auto bg-blue-600 text-white px-6 py-3 rounded-md font-bold hover:bg-blue-700"
             >
-                {isUltimaAulaDoModulo ? (proximoModulo ? 'Ir para o Próximo Módulo →' : 'Finalizar Curso') : 'Próxima Aula →'}
+                {isUltimaAulaDoModulo ? 'Ir para o Próximo Módulo →' : 'Próxima Aula →'}
             </button>
         </div>
       </main>

@@ -2,9 +2,19 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { modulos } from '../../../data/modulos'; // Importando os dados centralizados
 
-// Componente para o Círculo de Progresso
+// Tipos para os dados que virão da API
+interface Aula {
+  id: number;
+}
+interface Modulo {
+  id: number;
+  title: string;
+  description: string;
+  aulas: Aula[];
+}
+
+// Componente para o Círculo de Progresso (sem alterações)
 const ProgressCircle = ({ percentage }: { percentage: number }) => {
   const strokeWidth = 10;
   const radius = 50;
@@ -47,24 +57,44 @@ const ProgressCircle = ({ percentage }: { percentage: number }) => {
 };
 
 export default function DashboardPage() {
+  const [modulos, setModulos] = useState<Modulo[]>([]);
   const [aulasConcluidas, setAulasConcluidas] = useState<number[]>([]);
 
   useEffect(() => {
-    // Carrega o progresso salvo no navegador
-    const progressoSalvo = localStorage.getItem('progressoAulas');
-    if (progressoSalvo) {
-      setAulasConcluidas(JSON.parse(progressoSalvo));
-    }
+    const fetchData = async () => {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      try {
+        // Busca os módulos e o progresso em paralelo
+        const [modulosRes, progressoRes] = await Promise.all([
+          fetch('http://localhost:3001/modulos', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          }),
+          fetch('http://localhost:3001/progresso', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          })
+        ]);
+
+        const modulosData = await modulosRes.json();
+        const progressoData = await progressoRes.json();
+
+        setModulos(modulosData);
+        setAulasConcluidas(progressoData);
+      } catch (error) {
+        console.error("Erro ao buscar dados:", error);
+      }
+    };
+    fetchData();
   }, []);
 
-  const getProgressoModulo = (moduloId: number) => {
-    const modulo = modulos.find(m => m.id === moduloId);
+  const getProgressoModulo = (modulo: Modulo) => {
     if (!modulo || modulo.aulas.length === 0) return 0;
     
-    const aulasDoModulo = modulo.aulas.map(a => a.id);
-    const concluidasNesteModulo = aulasDoModulo.filter(id => aulasConcluidas.includes(id));
+    const aulasDoModuloIds = modulo.aulas.map(a => a.id);
+    const concluidasNesteModulo = aulasDoModuloIds.filter(id => aulasConcluidas.includes(id));
     
-    return (concluidasNesteModulo.length / aulasDoModulo.length) * 100;
+    return (concluidasNesteModulo.length / aulasDoModuloIds.length) * 100;
   };
 
   return (
@@ -72,8 +102,8 @@ export default function DashboardPage() {
       <h2 className="text-2xl font-semibold mb-6">Meus Módulos</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {modulos.map((modulo, index) => {
-          const progresso = getProgressoModulo(modulo.id);
-          const progressoAnterior = index > 0 ? getProgressoModulo(modulos[index - 1].id) : 100;
+          const progresso = getProgressoModulo(modulo);
+          const progressoAnterior = index > 0 ? getProgressoModulo(modulos[index - 1]) : 100;
           const isLocked = index > 0 && progressoAnterior < 100;
 
           return (
