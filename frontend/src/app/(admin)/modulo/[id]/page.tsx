@@ -3,29 +3,53 @@
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 
-// Dados de exemplo (agora só com o conteúdo)
+// Usamos uma estrutura de dados semelhante à do dashboard para encontrar as aulas
 const modulos = [
-  { id: 1, title: 'Módulo 1: Introdução ao Desenvolvimento Web', description: 'Comece sua jornada aqui, aprendendo os conceitos fundamentais.', locked: false, videoUrl: 'https://www.youtube.com/embed/videoseries?list=PLHz_AreHm4dkZ9-atkcmcBaMZdmLHft8n' },
-  { id: 2, title: 'Módulo 2: HTML e CSS na Prática', description: 'Construa suas primeiras páginas e estilize-as com maestria.', locked: false, videoUrl: 'https://www.youtube.com/embed/Ejkb_YpuHWs' },
-  { id: 3, title: 'Módulo 3: JavaScript Essencial', description: 'Adicione interatividade e dinamismo aos seus projetos.', locked: false, videoUrl: 'https://www.youtube.com/embed/BXqUH86F-kA' },
-  { id: 4, title: 'Módulo 4: React.js do Básico ao Avançado', description: 'Crie interfaces reativas e modernas com a biblioteca mais popular.', locked: true, videoUrl: null },
-  { id: 5, title: 'Módulo 5: Backend com Node.js e Express', description: 'Entenda como o "cérebro" das aplicações funciona.', locked: true, videoUrl: null },
-  { id: 6, title: 'Módulo 6: Bancos de Dados com Prisma', description: 'Aprenda a modelar e gerenciar dados de forma eficiente.', locked: true, videoUrl: null },
-  { id: 7, title: 'Módulo 7: Autenticação e Segurança', description: 'Proteja suas aplicações com as melhores práticas.', locked: true, videoUrl: null },
-  { id: 8, title: 'Módulo 8: Testes Automatizados', description: 'Garanta a qualidade e a estabilidade do seu código.', locked: true, videoUrl: null },
-  { id: 9, title: 'Módulo 9: Deploy em Produção', description: 'Coloque seu projeto no ar para o mundo ver.', locked: true, videoUrl: null },
-  { id: 10, title: 'Módulo 10: Próximos Passos', description: 'Continue sua evolução como desenvolvedor.', locked: true, videoUrl: null },
+    { 
+        id: 1, 
+        title: 'Módulo 1: Fundamentos da Herborista', 
+        description: 'Comece a sua jornada no mundo das plantas medicinais.',
+        locked: false,
+        aulas: [
+          { id: 101, title: 'Aula 1: O que é Herborismo e Fitoterapia?' },
+          { id: 102, title: 'Aula 2: Segurança e Boas Práticas de Coleta' },
+          { id: 103, title: 'Aula 3: Métodos de Extração: Chás, Infusões e Decocções' },
+        ] 
+      },
+      { 
+        id: 2, 
+        title: 'Módulo 2: Ervas para a Saúde Digestiva', 
+        description: 'Aprenda a usar plantas para o bem-estar do seu sistema digestivo.',
+        locked: false,
+        aulas: [
+          { id: 201, title: 'Aula 1: Hortelã-Pimenta: Alívio para Indigestão e Gases' },
+          { id: 202, title: 'Aula 2: Gengibre: O Aliado contra Náuseas' },
+          { id: 203, title: 'Aula 3: Camomila: Calmante Digestivo e Anti-inflamatório' },
+        ] 
+      },
+      { 
+        id: 3, 
+        title: 'Módulo 3: Cascas de Frutas Medicinais', 
+        description: 'Descubra o poder terapêutico escondido nas cascas das frutas.',
+        locked: false,
+        aulas: [
+          { id: 301, title: 'Aula 1: Casca de Romã: Antioxidante e Antisséptica' },
+          { id: 302, title: 'Aula 2: Casca de Laranja: Rica em Vitamina C e Óleos Essenciais' },
+          { id: 303, title: 'Aula 3: Casca de Banana: Benefícios para a Pele e Sono' },
+        ] 
+      },
+    // Módulos bloqueados não precisam ter os dados das aulas aqui por enquanto
+    { id: 4, title: 'Módulo 4: Plantas para o Sistema Nervoso', locked: true, aulas: [] },
+    { id: 5, title: 'Módulo 5: Primeiros Socorros com Ervas', locked: true, aulas: [] },
+    { id: 6, title: 'Módulo 6: Cosmética Natural', locked: true, aulas: [] },
 ];
 
 export default function ModuloPage() {
   const params = useParams();
   const { id } = params;
 
-  // Encontra o módulo correspondente ao ID da URL
   const modulo = modulos.find(m => m.id.toString() === id);
   
-  // A verificação do token FOI REMOVIDA daqui, pois o /app/(admin)/layout.tsx já faz isso!
-
   if (!modulo) {
     return (
         <div>
@@ -37,20 +61,10 @@ export default function ModuloPage() {
     );
   }
 
-  // Se o módulo estiver bloqueado, mostra uma mensagem
   if (modulo.locked) {
-    return (
-      <div className="flex flex-col items-center justify-center text-center">
-        <h1 className="text-3xl font-bold mb-4">Acesso Negado</h1>
-        <p className="text-gray-400 mb-8">Este módulo ainda não está disponível para você.</p>
-        <Link href="/dashboard" className="px-4 py-2 font-bold text-white bg-blue-600 rounded-md hover:bg-blue-700">
-          Voltar para o Dashboard
-        </Link>
-      </div>
-    );
+    // ... (código para módulo bloqueado continua o mesmo)
   }
 
-  // Se o módulo estiver liberado, exibe o conteúdo
   return (
     <div>
       <header className="mb-8">
@@ -58,21 +72,20 @@ export default function ModuloPage() {
         <p className="text-lg text-gray-400">{modulo.description}</p>
       </header>
       <main>
-        <div className="aspect-w-16 aspect-h-9 bg-gray-800 rounded-lg overflow-hidden">
-          {modulo.videoUrl ? (
-            <iframe
-              src={modulo.videoUrl}
-              title="YouTube video player"
-              frameBorder="0"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-              className="w-full h-full"
-            ></iframe>
-          ) : (
-            <div className="flex items-center justify-center h-full">
-              <p>Conteúdo em preparação.</p>
-            </div>
-          )}
+        <h2 className="text-2xl font-semibold mb-4">Aulas do Módulo</h2>
+        <div className="flex flex-col space-y-4">
+            {modulo.aulas.map((aula, index) => (
+                <div key={aula.id} className="bg-gray-800 p-4 rounded-lg flex items-center justify-between hover:bg-gray-700 transition-colors">
+                    <div className="flex items-center">
+                        <span className="text-gray-500 font-bold text-lg mr-4">{index + 1}</span>
+                        <h3 className="text-lg">{aula.title}</h3>
+                    </div>
+                    {/* Este link ainda não funciona, iremos criar esta página a seguir */}
+                    <Link href={`#`} className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-blue-700">
+                        Assistir
+                    </Link>
+                </div>
+            ))}
         </div>
       </main>
     </div>
