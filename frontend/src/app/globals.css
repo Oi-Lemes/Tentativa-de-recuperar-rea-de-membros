@@ -19,26 +19,16 @@
   }
 }
 
-/* --- CORREÇÃO APLICADA AQUI --- */
 html {
   height: 100%;
   
-  /* 1. Define a imagem de fundo */
-  background-image: url('/frontend/public/img/fundo.jpg');
+  /* --- CAMINHO CORRIGIDO AQUI --- */
+  background-image: url('/frontend/public/img/fundo.png');
 
-  /* 2. Garante que a imagem cubra toda a tela */
   background-size: cover;
-
-  /* 3. Centraliza a imagem na tela */
   background-position: center center;
-
-  /* 4. Impede que a imagem se repita */
   background-repeat: no-repeat;
-
-  /* 5. Fixa a imagem para que ela não role com o conteúdo */
   background-attachment: fixed;
-  
-  /* 6. Cor de fundo caso a imagem falhe */
   background-color: #0a0a0a;
 }
 
