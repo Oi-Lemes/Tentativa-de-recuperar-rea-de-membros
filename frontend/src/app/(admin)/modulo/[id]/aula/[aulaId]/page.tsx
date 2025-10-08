@@ -24,6 +24,31 @@ export default function AulaPage() {
   const [modulo, setModulo] = useState<Modulo | null>(null);
   const [aulasConcluidas, setAulasConcluidas] = useState<number[]>([]);
 
+  // Derivação de estado
+  const aulaAtual = modulo?.aulas.find(a => a.id.toString() === aulaId);
+  const aulaIndex = modulo?.aulas.findIndex(a => a.id.toString() === aulaId);
+  const isUltimaAulaDoModulo = aulaIndex !== undefined && modulo ? aulaIndex === modulo.aulas.length - 1 : false;
+  const isConcluida = aulaAtual ? aulasConcluidas.includes(aulaAtual.id) : false;
+
+  // --- LÓGICA DE REDIRECIONAMENTO AUTOMÁTICO ---
+  // Este useEffect observa mudanças no estado 'isConcluida'.
+  useEffect(() => {
+    // Se a aula atual é a última do módulo E ela acabou de ser marcada como concluída...
+    if (isUltimaAulaDoModulo && isConcluida) {
+      console.log('Última aula do módulo concluída! Redirecionando em 3 segundos...');
+      
+      // Criamos um timer de 3 segundos (3000 milissegundos)
+      const timer = setTimeout(() => {
+        // Após 3 segundos, redireciona para o dashboard
+        router.push('/dashboard');
+      }, 3000);
+
+      // Limpa o timer se o usuário sair da página antes do tempo
+      return () => clearTimeout(timer);
+    }
+  }, [isConcluida, isUltimaAulaDoModulo, router]);
+
+
   useEffect(() => {
     const fetchData = async () => {
         const token = localStorage.getItem('token');
@@ -47,21 +72,14 @@ export default function AulaPage() {
     fetchData();
   }, [moduleId]);
 
-  // Derivação de estado
-  const aulaAtual = modulo?.aulas.find(a => a.id.toString() === aulaId);
-  const aulaIndex = modulo?.aulas.findIndex(a => a.id.toString() === aulaId);
 
   if (!modulo || !aulaAtual || aulaIndex === undefined) {
     return <div>Aula não encontrada.</div>;
   }
-  
-  const isUltimaAulaDoModulo = aulaIndex === modulo.aulas.length - 1;
-  const proximoModuloId = parseInt(moduleId as string, 10) + 1; // Simplificado
-  const isConcluida = aulasConcluidas.includes(aulaAtual.id);
 
   const handleMarcarComoConcluida = async () => {
     const token = localStorage.getItem('token');
-    if(!token) return;
+    if(!token || !aulaAtual) return;
 
     try {
         await fetch(`http://localhost:3001/progresso/aula/${aulaAtual.id}`, {
@@ -69,7 +87,6 @@ export default function AulaPage() {
             headers: { 'Authorization': `Bearer ${token}` },
         });
 
-        // Atualiza o estado local para refletir a mudança imediatamente
         let progressoAtualizado;
         if (isConcluida) {
             progressoAtualizado = aulasConcluidas.filter(id => id !== aulaAtual.id);
@@ -78,7 +95,6 @@ export default function AulaPage() {
         }
         setAulasConcluidas(progressoAtualizado);
 
-        // Dispara um evento para o layout atualizar o progresso total
         window.dispatchEvent(new Event('storage'));
 
     } catch (error) {
@@ -87,15 +103,12 @@ export default function AulaPage() {
   };
 
   const handleProximo = () => {
-    // Se não for a última aula, vai para a próxima aula
-    if (!isUltimaAulaDoModulo) {
+    if (!isUltimaAulaDoModulo && modulo) {
         const proximaAula = modulo.aulas[aulaIndex + 1];
         router.push(`/modulo/${moduleId}/aula/${proximaAula.id}`);
     } 
-    // Se for a última aula e houver um próximo módulo, vai para o próximo módulo
     else {
-        // Esta lógica pode ser melhorada para verificar se o próximo módulo realmente existe
-        router.push(`/modulo/${proximoModuloId}`);
+        router.push('/dashboard');
     }
   };
 
@@ -119,9 +132,9 @@ export default function AulaPage() {
         </div>
 
         {isUltimaAulaDoModulo && isConcluida && (
-            <div className="bg-green-900/50 border border-green-700 text-green-300 px-4 py-3 rounded-lg text-center">
+            <div className="bg-green-900/50 border border-green-700 text-green-300 px-4 py-3 rounded-lg text-center animate-pulse">
                 <h3 className="font-bold text-lg">Parabéns!</h3>
-                <p>Você concluiu o {modulo.title} com sucesso. Continue o seu aprendizado!</p>
+                <p>Você concluiu o {modulo.title}. Redirecionando para o dashboard...</p>
             </div>
         )}
 
@@ -139,9 +152,10 @@ export default function AulaPage() {
 
             <button
                 onClick={handleProximo}
-                className="w-full sm:w-auto bg-blue-600 text-white px-6 py-3 rounded-md font-bold hover:bg-blue-700"
+                disabled={isUltimaAulaDoModulo && isConcluida} // Desabilita o botão enquanto redireciona
+                className="w-full sm:w-auto bg-blue-600 text-white px-6 py-3 rounded-md font-bold hover:bg-blue-700 disabled:bg-gray-500 disabled:cursor-not-allowed"
             >
-                {isUltimaAulaDoModulo ? 'Ir para o Próximo Módulo →' : 'Próxima Aula →'}
+                {isUltimaAulaDoModulo ? 'Voltar para o Dashboard' : 'Próxima Aula →'}
             </button>
         </div>
       </main>
