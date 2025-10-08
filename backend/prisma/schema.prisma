@@ -1,9 +1,6 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -12,8 +9,6 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
-
-// Mapa do nosso Banco de Dados
 
 model User {
   id        Int      @id @default(autoincrement())
@@ -31,18 +26,18 @@ model Modulo {
 }
 
 model Aula {
-  id       Int      @id @default(autoincrement())
-  title    String
-  modulo   Modulo   @relation(fields: [moduloId], references: [id])
-  moduloId Int
+  id                    Int             @id @default(autoincrement())
+  title                 String
+  modulo                Modulo          @relation(fields: [moduloId], references: [id])
+  moduloId              Int
   usuariosQueConcluiram ProgressoAula[]
 }
 
 model ProgressoAula {
-  user      User     @relation(fields: [userId], references: [id])
-  userId    Int
-  aula      Aula     @relation(fields: [aulaId], references: [id])
-  aulaId    Int
+  user        User     @relation(fields: [userId], references: [id])
+  userId      Int
+  aula        Aula     @relation(fields: [aulaId], references: [id])
+  aulaId      Int
   completedAt DateTime @default(now())
 
   @@id([userId, aulaId]) // Chave primária composta
