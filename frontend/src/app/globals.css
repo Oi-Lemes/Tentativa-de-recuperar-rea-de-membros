@@ -24,7 +24,7 @@ html {
   height: 100%;
   
   /* 1. Define a imagem de fundo */
-  background-image: url('/img/fundo.jpg');
+  background-image: url('/frontend/public/img/fundo.jpg');
 
   /* 2. Garante que a imagem cubra toda a tela */
   background-size: cover;
