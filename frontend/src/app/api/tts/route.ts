@@ -14,21 +14,13 @@ export async function POST(req: Request) {
   try {
     const request = {
       input: { text: text },
-      // --- CONFIGURAÇÃO DA VOZ PERFEITA ---
       voice: {
-        // 1. Voz Brasileira:
         languageCode: 'pt-BR',
-        // 2. Voz Feminina e Natural: 'Wavenet-C' é uma voz feminina
-        // com ótima entonação para o português do Brasil.
         name: 'pt-BR-Wavenet-C', 
       },
-      // --- AJUSTES FINOS DE ÁUDIO ---
       audioConfig: {
         audioEncoding: 'MP3' as const,
-        // 3. Falar mais rápido: Aumenta a velocidade em 15%. (O padrão é 1.0)
         speakingRate: 1.15,
-        // 4. Entonação de voz: Um leve ajuste no tom (pitch) para
-        // deixar a fala menos monótona e mais expressiva.
         pitch: 1.2,
       },
     };

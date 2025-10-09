@@ -4,7 +4,6 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 
-// ... (declaração global e interface Message permanecem as mesmas)
 declare global {
   interface Window {
     SpeechRecognition: any;
@@ -18,16 +17,12 @@ interface Message {
   parts: { text: string }[];
 }
 
-
 export default function ChatbotNina() {
   const [isOpen, setIsOpen] = useState(false);
   const [history, setHistory] = useState<Message[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   
-  const [sentenceQueue, setSentenceQueue] = useState<string[]>([]);
-  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
-
   const recognitionRef = useRef<any>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -36,16 +31,7 @@ export default function ChatbotNina() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [history]);
 
-  useEffect(() => {
-    if (!isAudioPlaying && sentenceQueue.length > 0) {
-      const nextSentence = sentenceQueue[0];
-      setSentenceQueue(prev => prev.slice(1));
-      playAudio(nextSentence);
-    }
-  }, [sentenceQueue, isAudioPlaying]);
-
   const playAudio = useCallback(async (text: string) => {
-    setIsAudioPlaying(true);
     try {
       const response = await fetch('/api/tts', {
         method: 'POST',
@@ -60,12 +46,10 @@ export default function ChatbotNina() {
   
       if (audioRef.current) {
         audioRef.current.src = audioUrl;
-        audioRef.current.onended = () => setIsAudioPlaying(false);
         audioRef.current.play();
       }
     } catch (error) {
       console.error("Erro ao tocar áudio:", error);
-      setIsAudioPlaying(false);
     }
   }, []);
 
@@ -75,55 +59,35 @@ export default function ChatbotNina() {
     setIsGenerating(true);
     const newUserMessage: Message = { id: Date.now(), role: 'user', parts: [{ text: messageText }] };
     
-    // CORREÇÃO CRÍTICA: Criamos o novo histórico em uma variável
     const updatedHistory = [...history, newUserMessage];
-    
-    // Atualizamos o estado visual com essa variável
     setHistory(updatedHistory);
     
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // E enviamos a MESMA variável para a API, garantindo consistência
         body: JSON.stringify({ history: updatedHistory, message: messageText }),
       });
 
-      if (!response.body) return;
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let fullResponseText = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        fullResponseText += decoder.decode(value);
+      if (!response.ok) {
+        throw new Error('Falha na resposta da API de chat.');
       }
 
-      const delimiter = "[TEXTO_ESCRITO]";
-      let spokenPart = fullResponseText;
-      let writtenPart = '';
+      const result = await response.json();
+      const responseText = result.text;
 
-      if (fullResponseText.includes(delimiter)) {
-        const parts = fullResponseText.split(delimiter);
-        spokenPart = parts[0];
-        writtenPart = parts[1].trim();
-      }
-
-      if (spokenPart.trim()) {
-        const sentences = spokenPart.match(/[^.!?]+[.!?]+/g) || [spokenPart];
-        setSentenceQueue(prev => [...prev, ...sentences]);
-      }
-
-      if (writtenPart) {
-        const modelMessage: Message = {
-          id: Date.now(),
-          role: 'model',
-          parts: [{ text: writtenPart }],
-        };
-        setHistory(prev => [...prev, modelMessage]);
-      }
+      // Cria a mensagem completa da Nina
+      const modelMessage: Message = {
+        id: Date.now(),
+        role: 'model',
+        parts: [{ text: responseText }],
+      };
+      
+      // Adiciona a mensagem de texto ao chat
+      setHistory(prev => [...prev, modelMessage]);
+      
+      // Toca o áudio da resposta
+      await playAudio(responseText);
 
     } catch (error) {
       console.error("Erro ao enviar mensagem:", error);
@@ -168,7 +132,6 @@ export default function ChatbotNina() {
   };
   
   return (
-    // O JSX (return) permanece o mesmo
     <>
       <audio ref={audioRef} className="hidden" />
       {isOpen && (
