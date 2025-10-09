@@ -2,7 +2,6 @@
 
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
 
-// Configuração de segurança para permitir um leque mais vasto de respostas
 const safetySettings = [
   { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
   { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
@@ -23,13 +22,13 @@ export async function POST(req: Request) {
   try {
     const { history, message } = await req.json();
 
+    // ✅ Com a biblioteca atualizada, este modelo vai funcionar.
     const model = genAI.getGenerativeModel({
-        model: 'gemini-1.5-flash', // Usando o modelo mais moderno e compatível
+        model: 'gemini-1.5-flash', 
         systemInstruction: systemInstruction,
         safetySettings,
     });
 
-    // Remove o campo 'id' do histórico antes de o enviar para a API
     const sanitizedHistory = history.map((msg: any) => ({
       role: msg.role,
       parts: msg.parts,
@@ -39,8 +38,7 @@ export async function POST(req: Request) {
 
     const result = await chat.sendMessage(message);
     const responseText = result.response.text();
-    
-    // Retorna a resposta completa no formato JSON, como o frontend espera
+
     return new Response(JSON.stringify({ text: responseText }), {
       headers: { 'Content-Type': 'application/json' },
     });
