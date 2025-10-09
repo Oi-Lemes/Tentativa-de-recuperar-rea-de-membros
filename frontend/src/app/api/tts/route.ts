@@ -1,11 +1,8 @@
 // Caminho do ficheiro: frontend/src/app/api/tts/route.ts
 
-import OpenAI from 'openai';
+import { TextToSpeechClient } from '@google-cloud/text-to-speech';
 
-// Inicializa o cliente da OpenAI com a sua chave de API
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+const client = new TextToSpeechClient();
 
 export async function POST(req: Request) {
   const { text } = await req.json();
@@ -15,32 +12,35 @@ export async function POST(req: Request) {
   }
 
   try {
-    // Solicita a geração de áudio para a OpenAI com as melhores configurações
-    const audioResponse = await openai.audio.speech.create({
-      // 1. Modelo de Alta Definição: Garante a máxima qualidade e clareza.
-      model: "tts-1-hd",
-      
-      // 2. Voz: A "shimmer" é amplamente considerada a que soa mais natural
-      // e com menos sotaque para o português do Brasil.
-      voice: "shimmer",
-      
-      // 3. Velocidade: Um leve aumento para tornar a fala mais fluida e dinâmica.
-      speed: 1.1,
+    const request = {
+      input: { text: text },
+      // --- CONFIGURAÇÃO DA VOZ PERFEITA ---
+      voice: {
+        // 1. Voz Brasileira:
+        languageCode: 'pt-BR',
+        // 2. Voz Feminina e Natural: 'Wavenet-C' é uma voz feminina
+        // com ótima entonação para o português do Brasil.
+        name: 'pt-BR-Wavenet-C', 
+      },
+      // --- AJUSTES FINOS DE ÁUDIO ---
+      audioConfig: {
+        audioEncoding: 'MP3' as const,
+        // 3. Falar mais rápido: Aumenta a velocidade em 15%. (O padrão é 1.0)
+        speakingRate: 1.15,
+        // 4. Entonação de voz: Um leve ajuste no tom (pitch) para
+        // deixar a fala menos monótona e mais expressiva.
+        pitch: 1.2,
+      },
+    };
 
-      // O texto que a Nina irá falar
-      input: text,
-
-      // Formato do áudio
-      response_format: "mp3",
-    });
-
-    // Envia o áudio diretamente para o navegador
-    return new Response(audioResponse.body, {
+    const [response] = await client.synthesizeSpeech(request);
+    
+    return new Response(response.audioContent, {
       headers: { 'Content-Type': 'audio/mpeg' },
     });
 
   } catch (error) {
-    console.error("Erro na API de TTS da OpenAI:", error);
+    console.error("Erro na API de TTS do Google Cloud:", error);
     return new Response("Erro ao gerar áudio.", { status: 500 });
   }
 }
