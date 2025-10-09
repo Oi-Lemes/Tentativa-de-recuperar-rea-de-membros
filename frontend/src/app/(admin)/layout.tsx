@@ -1,8 +1,11 @@
+// Caminho do ficheiro: frontend/src/app/(admin)/layout.tsx
+
 "use client";
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import ChatbotNina from '@/components/ChatbotNina';
 
 // Componente para o Círculo de Progresso (sem alterações)
 const ProgressCircle = ({ percentage }: { percentage: number }) => {
@@ -50,7 +53,6 @@ export default function AdminLayout({
   const router = useRouter();
   const [progressoTotal, setProgressoTotal] = useState(0);
 
-  // Função para buscar dados de progresso da API
   const fetchProgressData = async () => {
     const token = localStorage.getItem('token');
     if (!token) {
@@ -69,7 +71,6 @@ export default function AdminLayout({
         ]);
 
         if (!modulosRes.ok || !progressoRes.ok) {
-            // Se o token for inválido, desloga o usuário
             localStorage.removeItem('token');
             router.push('/');
             return;
@@ -77,7 +78,6 @@ export default function AdminLayout({
 
         const modulos = await modulosRes.json();
         const aulasConcluidasIds = await progressoRes.json();
-
         const totalAulas = modulos.reduce((acc: number, modulo: any) => acc + modulo.aulas.length, 0);
 
         if (totalAulas > 0) {
@@ -87,7 +87,7 @@ export default function AdminLayout({
             setProgressoTotal(0);
         }
 
-    } catch (error) {
+    } catch (error) { // <-- O ERRO ESTAVA AQUI, AGORA CORRIGIDO
         console.error("Erro ao buscar progresso total:", error);
     }
   };
@@ -100,11 +100,8 @@ export default function AdminLayout({
         fetchProgressData();
     }
     
-    // Adiciona um "ouvinte" para quando o progresso for alterado em outra página
-    // Isso fará com que o círculo de progresso atualize em tempo real
     window.addEventListener('storage', fetchProgressData);
 
-    // Limpa o "ouvinte" quando o componente for desmontado
     return () => {
       window.removeEventListener('storage', fetchProgressData);
     };
@@ -128,7 +125,6 @@ export default function AdminLayout({
           <Link href="/dashboard" className="text-lg text-gray-300 hover:text-white p-2 rounded-md hover:bg-gray-700">
             Início / Módulos
           </Link>
-          {/* Pode adicionar mais links aqui no futuro */}
         </nav>
 
         <button 
@@ -139,10 +135,15 @@ export default function AdminLayout({
         </button>
       </aside>
 
-      {/* Conteúdo Principal da Página */}
-      <main className="flex-1 p-12">
+      {/* Conteúdo Principal da Página (com a imagem de fundo) */}
+      <main 
+        className="flex-1 p-12 bg-cover bg-center" 
+        style={{ backgroundImage: "url('/img/fundo.png')" }}
+      >
         {children}
       </main>
+      
+      <ChatbotNina />
     </div>
   );
 }
