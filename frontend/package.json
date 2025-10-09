@@ -8,6 +8,7 @@
     "start": "next start"
   },
   "dependencies": {
+    "@google-cloud/text-to-speech": "^6.3.0",
     "@google/generative-ai": "^0.24.1",
     "elevenlabs-node": "^2.0.3",
     "next": "15.5.4",

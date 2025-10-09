@@ -4,7 +4,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 
-// Declaração para a API de Reconhecimento de Voz do navegador
+// ... (declaração global e interface Message permanecem as mesmas)
 declare global {
   interface Window {
     SpeechRecognition: any;
@@ -15,16 +15,16 @@ declare global {
 interface Message {
   id: number;
   role: 'user' | 'model';
-  text: string;
+  parts: { text: string }[];
 }
+
 
 export default function ChatbotNina() {
   const [isOpen, setIsOpen] = useState(false);
   const [history, setHistory] = useState<Message[]>([]);
   const [isRecording, setIsRecording] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false); // Para controlar o estado geral (texto+voz)
+  const [isGenerating, setIsGenerating] = useState(false);
   
-  // Fila para gerir as frases que precisam de ser convertidas em áudio e exibidas
   const [sentenceQueue, setSentenceQueue] = useState<string[]>([]);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
 
@@ -32,25 +32,20 @@ export default function ChatbotNina() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // Efeito para rolar para a última mensagem
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [history]);
 
-  // Efeito que funciona como o nosso "gestor de fila" de áudio
   useEffect(() => {
-    // Se o áudio não estiver a tocar e houver frases na fila...
     if (!isAudioPlaying && sentenceQueue.length > 0) {
       const nextSentence = sentenceQueue[0];
-      setSentenceQueue(prev => prev.slice(1)); // Remove a frase da fila
-      playAudioAndSyncText(nextSentence);
+      setSentenceQueue(prev => prev.slice(1));
+      playAudio(nextSentence);
     }
   }, [sentenceQueue, isAudioPlaying]);
 
-
-  const playAudioAndSyncText = useCallback(async (text: string) => {
+  const playAudio = useCallback(async (text: string) => {
     setIsAudioPlaying(true);
-  
     try {
       const response = await fetch('/api/tts', {
         method: 'POST',
@@ -60,47 +55,17 @@ export default function ChatbotNina() {
   
       if (!response.ok) throw new Error("Falha ao gerar áudio.");
   
-      const audioBlob = await response.blob();
+      const audioBlob = new Blob([await response.arrayBuffer()], { type: 'audio/mpeg' });
       const audioUrl = URL.createObjectURL(audioBlob);
   
       if (audioRef.current) {
         audioRef.current.src = audioUrl;
-  
-        // Toca o áudio e, quando ele acabar, sinaliza que parou de tocar
-        audioRef.current.onended = () => {
-          setIsAudioPlaying(false);
-        };
-  
-        // Exibição do texto palavra por palavra (efeito "karaoke")
-        const words = text.split(' ');
-        let currentWordIndex = 0;
-        
-        // Simula a duração do áudio para temporizar as palavras. Não é perfeito mas funciona bem.
-        const audioDuration = await new Promise<number>(resolve => {
-            const tempAudio = new Audio(audioUrl);
-            tempAudio.onloadedmetadata = () => resolve(tempAudio.duration);
-        });
-        const delay = (audioDuration * 1000) / words.length;
-
-        const interval = setInterval(() => {
-          if (currentWordIndex < words.length) {
-            setHistory(prev => {
-              const newHistory = [...prev];
-              const lastMessage = newHistory[newHistory.length - 1];
-              lastMessage.text = words.slice(0, currentWordIndex + 1).join(' ');
-              return newHistory;
-            });
-            currentWordIndex++;
-          } else {
-            clearInterval(interval);
-          }
-        }, delay);
-  
+        audioRef.current.onended = () => setIsAudioPlaying(false);
         audioRef.current.play();
       }
     } catch (error) {
       console.error("Erro ao tocar áudio:", error);
-      setIsAudioPlaying(false); // Garante que o estado é resetado em caso de erro
+      setIsAudioPlaying(false);
     }
   }, []);
 
@@ -108,51 +73,66 @@ export default function ChatbotNina() {
     if (!messageText.trim() || isGenerating) return;
 
     setIsGenerating(true);
-    const newUserMessage: Message = { id: Date.now(), role: 'user', text: messageText };
-    setHistory(prev => [...prev, newUserMessage]);
+    const newUserMessage: Message = { id: Date.now(), role: 'user', parts: [{ text: messageText }] };
     
-    // Adiciona um placeholder para a resposta da Nina
-    const modelMessageId = Date.now() + 1;
-    setHistory(prev => [...prev, { id: modelMessageId, role: 'model', text: '' }]);
-
+    // CORREÇÃO CRÍTICA: Criamos o novo histórico em uma variável
+    const updatedHistory = [...history, newUserMessage];
+    
+    // Atualizamos o estado visual com essa variável
+    setHistory(updatedHistory);
+    
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ history: [...history, { role: 'user', parts: [{ text: messageText }] }], message: messageText }),
+        // E enviamos a MESMA variável para a API, garantindo consistência
+        body: JSON.stringify({ history: updatedHistory, message: messageText }),
       });
 
       if (!response.body) return;
+
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      let sentenceBuffer = '';
+      let fullResponseText = '';
 
       while (true) {
         const { done, value } = await reader.read();
-        if (done) {
-          // Adiciona a última frase do buffer à fila, se houver
-          if (sentenceBuffer.trim()) {
-            setSentenceQueue(prev => [...prev, sentenceBuffer.trim()]);
-          }
-          break;
-        }
-        const chunk = decoder.decode(value);
-        sentenceBuffer += chunk;
-
-        // Procura por frases completas (terminadas em . ! ?)
-        let boundary = sentenceBuffer.search(/[.!?]/);
-        while (boundary !== -1) {
-          const sentence = sentenceBuffer.substring(0, boundary + 1);
-          sentenceBuffer = sentenceBuffer.substring(boundary + 1);
-          setSentenceQueue(prev => [...prev, sentence.trim()]);
-          boundary = sentenceBuffer.search(/[.!?]/);
-        }
+        if (done) break;
+        fullResponseText += decoder.decode(value);
       }
+
+      const delimiter = "[TEXTO_ESCRITO]";
+      let spokenPart = fullResponseText;
+      let writtenPart = '';
+
+      if (fullResponseText.includes(delimiter)) {
+        const parts = fullResponseText.split(delimiter);
+        spokenPart = parts[0];
+        writtenPart = parts[1].trim();
+      }
+
+      if (spokenPart.trim()) {
+        const sentences = spokenPart.match(/[^.!?]+[.!?]+/g) || [spokenPart];
+        setSentenceQueue(prev => [...prev, ...sentences]);
+      }
+
+      if (writtenPart) {
+        const modelMessage: Message = {
+          id: Date.now(),
+          role: 'model',
+          parts: [{ text: writtenPart }],
+        };
+        setHistory(prev => [...prev, modelMessage]);
+      }
+
     } catch (error) {
       console.error("Erro ao enviar mensagem:", error);
-      setHistory(prev => prev.map(msg => 
-        msg.id === modelMessageId ? { ...msg, text: 'Desculpe, ocorreu um erro.' } : msg
-      ));
+      const errorMessage: Message = {
+        id: Date.now(),
+        role: 'model',
+        parts: [{ text: 'Desculpe, ocorreu um erro.' }],
+      };
+      setHistory(prev => [...prev, errorMessage]);
     } finally {
       setIsGenerating(false);
     }
@@ -168,16 +148,16 @@ export default function ChatbotNina() {
       alert("O seu navegador não suporta reconhecimento de voz.");
       return;
     }
-
     const recognition = new SpeechRecognition();
     recognition.lang = 'pt-BR';
-    recognition.continuous = false; // Grava até haver uma pausa
+    recognition.continuous = false;
     recognitionRef.current = recognition;
-
     recognition.onstart = () => setIsRecording(true);
     recognition.onend = () => setIsRecording(false);
-    recognition.onerror = (event: any) => console.error("Erro no reconhecimento de voz:", event.error);
-    
+    recognition.onerror = (event: any) => {
+        if (event.error === 'no-speech') return;
+        console.error("Erro no reconhecimento de voz:", event.error);
+    };
     recognition.onresult = (event: any) => {
       const finalTranscript = event.results[0][0].transcript;
       if (finalTranscript) {
@@ -188,9 +168,9 @@ export default function ChatbotNina() {
   };
   
   return (
+    // O JSX (return) permanece o mesmo
     <>
       <audio ref={audioRef} className="hidden" />
-
       {isOpen && (
         <div className="fixed bottom-20 right-4 w-80 h-[28rem] bg-gray-800 rounded-lg shadow-2xl flex flex-col z-50">
           <div className="bg-gray-900 p-3 flex justify-between items-center rounded-t-lg">
@@ -203,11 +183,11 @@ export default function ChatbotNina() {
                 <div className={`max-w-[80%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${
                   msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-200'
                 }`}>
-                  {msg.text}
+                  {msg.parts[0].text}
                 </div>
               </div>
             ))}
-            {isGenerating && history[history.length - 1]?.role === 'user' && (
+            {isGenerating && (
               <div className="flex justify-start">
                 <div className="bg-gray-700 text-gray-200 rounded-lg px-3 py-2 text-sm">
                   <span className="animate-pulse">...</span>
