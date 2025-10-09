@@ -76,17 +76,14 @@ export default function ChatbotNina() {
       const result = await response.json();
       const responseText = result.text;
 
-      // Cria a mensagem completa da Nina
       const modelMessage: Message = {
         id: Date.now(),
         role: 'model',
         parts: [{ text: responseText }],
       };
       
-      // Adiciona a mensagem de texto ao chat
       setHistory(prev => [...prev, modelMessage]);
       
-      // Toca o áudio da resposta
       await playAudio(responseText);
 
     } catch (error) {
