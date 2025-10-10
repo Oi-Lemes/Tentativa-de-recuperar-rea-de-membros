@@ -3,166 +3,124 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 
-// --- LÓGICA ADAPTATIVA DE FORMATO DE ÁUDIO ---
-const SUPPORTED_MIME_TYPES = [
-    'audio/webm; codecs=opus',
-    'audio/ogg; codecs=opus',
-    'audio/webm',
-];
-
-// Esta função encontra o primeiro formato de áudio que o navegador do usuário suporta.
+// Esta função agora é segura, pois só será chamada no cliente dentro do useEffect
 const getSupportedMimeType = () => {
-    for (const mimeType of SUPPORTED_MIME_TYPES) {
-        if (MediaRecorder.isTypeSupported(mimeType)) {
-            return mimeType;
-        }
+    const types = [
+        'audio/webm; codecs=opus',
+        'audio/ogg; codecs=opus',
+        'audio/webm',
+    ];
+    // Esta verificação é uma salvaguarda extra
+    if (typeof MediaRecorder === 'undefined') {
+        return null;
+    }
+    for (const type of types) {
+        if (MediaRecorder.isTypeSupported(type)) return type;
     }
     return null;
 };
 
 export default function ChatbotNina() {
-  const [isOpen, setIsOpen] = useState(false);
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
+    const [isOpen, setIsOpen] = useState(false);
+    const [isConnecting, setIsConnecting] = useState(false);
+    const [isConnected, setIsConnected] = useState(false);
+    const [isSpeaking, setIsSpeaking] = useState(false);
 
-  const ws = useRef<WebSocket | null>(null);
-  const mediaRecorder = useRef<MediaRecorder | null>(null);
-  const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
-  const mediaSourceRef = useRef<MediaSource | null>(null);
-  const sourceBufferRef = useRef<SourceBuffer | null>(null);
-  const audioChunkQueue = useRef<ArrayBuffer[]>([]);
-  const supportedMimeType = useRef<string | null>(null);
-
-  const processChunkQueue = useCallback(() => {
-    if (sourceBufferRef.current && !sourceBufferRef.current.updating && audioChunkQueue.current.length > 0) {
-      const chunk = audioChunkQueue.current.shift();
-      if (chunk) {
-        try {
-          sourceBufferRef.current.appendBuffer(chunk);
-          setIsSpeaking(true);
-        } catch (error) {
-          console.error("Erro ao adicionar buffer:", error);
-        }
-      }
-    }
-  }, []);
-  
-  useEffect(() => {
-    supportedMimeType.current = getSupportedMimeType();
-    mediaSourceRef.current = new MediaSource();
-    const audioPlayer = audioPlayerRef.current;
+    const ws = useRef<WebSocket | null>(null);
+    const mediaRecorder = useRef<MediaRecorder | null>(null);
+    const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
     
-    if (audioPlayer) {
-      audioPlayer.src = URL.createObjectURL(mediaSourceRef.current);
-      
-      const handleSourceOpen = () => {
-        console.log("MediaSource aberto, pronto para receber áudio.");
-        const mime = supportedMimeType.current;
-        if (mediaSourceRef.current && mime) {
-          const sourceBuffer = mediaSourceRef.current.addSourceBuffer(mime);
-          sourceBuffer.addEventListener('updateend', processChunkQueue);
-          sourceBufferRef.current = sourceBuffer;
-        } else {
-          console.error("Nenhum MIME type suportado encontrado para o MediaSource.");
+    // O MimeType suportado é determinado no cliente para evitar o erro de SSR
+    const [supportedMimeType, setSupportedMimeType] = useState<string | null>(null);
+
+    // Efeito para correr código APENAS no navegador
+    useEffect(() => {
+        // Determina o MimeType aqui, de forma segura
+        setSupportedMimeType(getSupportedMimeType());
+    }, []); // O array vazio [] garante que isto só corre uma vez quando o componente "monta" no cliente.
+
+    const connect = useCallback(async () => {
+        if (ws.current || !supportedMimeType) {
+            if (!supportedMimeType) {
+                alert("O seu navegador não suporta a gravação de áudio necessária.");
+            }
+            return;
         }
-      };
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            setIsConnecting(true);
+            ws.current = new WebSocket('ws://localhost:3001');
 
-      mediaSourceRef.current.addEventListener('sourceopen', handleSourceOpen);
+            ws.current.onopen = () => {
+                console.log('WebSocket Conectado!');
+                setIsConnecting(false);
+                setIsConnected(true);
+                setIsSpeaking(false);
 
-      return () => {
-        mediaSourceRef.current?.removeEventListener('sourceopen', handleSourceOpen);
-      }
-    }
-  }, [processChunkQueue]);
+                mediaRecorder.current = new MediaRecorder(stream, { mimeType: supportedMimeType });
 
-  useEffect(() => {
-    const audioPlayer = audioPlayerRef.current;
-    if (audioPlayer && audioChunkQueue.current.length > 0 && audioPlayer.paused) {
-      audioPlayer.play().catch(e => console.error("Play falhou:", e));
-    }
-    const interval = setInterval(() => {
-        if (sourceBufferRef.current && !sourceBufferRef.current.updating && audioChunkQueue.current.length === 0) {
-            setIsSpeaking(false);
+                mediaRecorder.current.ondataavailable = (event) => {
+                    if (event.data.size > 0 && ws.current?.readyState === WebSocket.OPEN) {
+                        ws.current.send(event.data);
+                    }
+                };
+                mediaRecorder.current.start(250); // Envia áudio a cada 250ms
+            };
+
+            ws.current.onmessage = async (event) => {
+                setIsSpeaking(true);
+                const audioBlob = new Blob([event.data], { type: 'audio/opus' });
+                const audioUrl = URL.createObjectURL(audioBlob);
+                if (audioPlayerRef.current) {
+                    audioPlayerRef.current.src = audioUrl;
+                    audioPlayerRef.current.play();
+                }
+            };
+
+            ws.current.onclose = () => {
+                console.log('WebSocket Desconectado.');
+                setIsConnected(false);
+                setIsConnecting(false);
+                mediaRecorder.current?.stop();
+                stream.getTracks().forEach(track => track.stop());
+                ws.current = null;
+            };
+            ws.current.onerror = (err) => {
+                console.error('Erro no WebSocket:', err);
+                ws.current?.close();
+            };
+        } catch (error) {
+            console.error("Erro ao obter acesso ao microfone:", error);
+            alert("Você precisa de permitir o acesso ao microfone para falar com a Nina.");
         }
-    }, 500);
-    return () => clearInterval(interval);
-  }, []);
+    }, [supportedMimeType]);
 
-  const connect = useCallback(async () => {
-    if (ws.current || !supportedMimeType.current) {
-        if (!supportedMimeType.current) {
-            alert("Seu navegador não suporta a gravação de áudio necessária para esta funcionalidade.");
+    const disconnect = () => {
+        if (mediaRecorder.current && mediaRecorder.current.state === 'recording') {
+            mediaRecorder.current.stop();
         }
-        return;
-    }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      setIsConnecting(true);
-      ws.current = new WebSocket('ws://localhost:3001');
-
-      ws.current.onopen = () => {
-        console.log('WebSocket Conectado!');
-        setIsConnecting(false);
-        setIsConnected(true);
-
-        mediaRecorder.current = new MediaRecorder(stream, { mimeType: supportedMimeType.current! });
-        console.log(`MediaRecorder iniciado com o formato: ${supportedMimeType.current}`);
-
-        mediaRecorder.current.ondataavailable = (event) => {
-          if (event.data.size > 0 && ws.current?.readyState === WebSocket.OPEN) {
-            ws.current.send(event.data);
-          }
-        };
-        mediaRecorder.current.start(250);
-      };
-
-      ws.current.onmessage = async (event) => {
-        let chunk: ArrayBuffer;
-        if (event.data instanceof Blob) {
-            chunk = await event.data.arrayBuffer();
-        } else if (event.data instanceof ArrayBuffer) {
-            chunk = event.data;
-        } else { return; }
-
-        audioChunkQueue.current.push(chunk);
-        processChunkQueue();
-      };
-
-      ws.current.onclose = () => {
-        console.log('WebSocket Desconectado.');
-        setIsConnected(false);
-        setIsConnecting(false);
-        mediaRecorder.current?.stop();
-        stream.getTracks().forEach(track => track.stop());
-        ws.current = null;
-      };
-      ws.current.onerror = (err) => {
-        console.error('Erro no WebSocket:', err);
         ws.current?.close();
-      };
-    } catch (error) {
-      console.error("Erro ao obter acesso ao microfone:", error);
-      alert("Você precisa permitir o acesso ao microfone para falar com a Nina.");
-    }
-  }, [processChunkQueue]);
+    };
 
-  const disconnect = () => { ws.current?.close(); };
-  const handleToggleConversation = () => { (isConnected || isConnecting) ? disconnect() : connect(); };
-  const getButtonState = () => {
-    if (isConnecting) return { text: "Conectando...", color: "bg-yellow-500", disabled: true };
-    if (isConnected) return { text: "Encerrar Conversa", color: "bg-red-500 hover:bg-red-600", disabled: false };
-    return { text: "Falar com a Nina", color: "bg-blue-600 hover:bg-blue-700", disabled: false };
-  };
-  const buttonState = getButtonState();
+    const handleToggleConversation = () => {
+        (isConnected || isConnecting) ? disconnect() : connect();
+    };
+    
+    // ... o resto do seu componente (return com o JSX) permanece igual ...
+    const getButtonState = () => {
+    if (isConnecting) return { text: "A ligar...", color: "bg-yellow-500", disabled: true };
+    if (isConnected) return { text: "Terminar Conversa", color: "bg-red-500 hover:bg-red-600", disabled: false };
+    return { text: "Falar com a Nina", color: "bg-blue-600 hover:bg-blue-700", disabled: supportedMimeType === null };
+    };
+    const buttonState = getButtonState();
 
   return (
     <>
-      <audio ref={audioPlayerRef} className="hidden" />
+      <audio ref={audioPlayerRef} className="hidden" onEnded={() => setIsSpeaking(false)} />
       {isOpen && (
         <div className="fixed bottom-20 right-4 w-80 h-auto bg-gray-800 rounded-lg shadow-2xl flex flex-col z-50">
           <div className="bg-gray-900 p-3 flex justify-between items-center rounded-t-lg">
-            <h3 className="font-bold text-white">Nina, sua Herbalista</h3>
+            <h3 className="font-bold text-white">Nina, a sua Herbalista</h3>
             <button onClick={() => { disconnect(); setIsOpen(false); }} className="text-gray-300 hover:text-white text-2xl leading-none">&times;</button>
           </div>
           <div className="flex-1 p-8 flex flex-col items-center justify-center space-y-4">
@@ -170,7 +128,7 @@ export default function ChatbotNina() {
                  <svg className={`w-16 h-16 ${isConnected ? 'text-green-400' : 'text-gray-500'}`} fill="currentColor" viewBox="0 0 20 20"><path d="M7 4a3 3 0 016 0v6a3 3 0 11-6 0V4z"/><path d="M5.5 11.5a5.5 5.5 0 1011 0v-6a5.5 5.5 0 10-11 0v6zM10 20a1 1 0 001-1v-2.065a8.45 8.45 0 005.657-3.238 1 1 0 00-1.58-1.22A6.5 6.5 0 0110 15a6.5 6.5 0 01-4.077-1.523 1 1 0 00-1.58 1.22A8.45 8.45 0 009 16.935V9a1 1 0 001 1z"/></svg>
               </div>
               <p className="text-sm text-gray-400 h-4">
-                {isConnecting ? "Conectando..." : isConnected ? "Conectado. Pode falar!" : "Pronta para ouvir."}
+                {isConnecting ? "A ligar..." : isConnected ? "Ligado. Pode falar!" : "Pronta para ouvir."}
               </p>
               <button
                 onClick={handleToggleConversation}

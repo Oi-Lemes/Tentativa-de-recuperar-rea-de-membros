@@ -1,15 +1,17 @@
 require('dotenv').config();
 
-// 1. Importações (com as novas para http e ws)
+// 1. Importações
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
-const http = require('http'); // Importação necessária
-const { WebSocketServer } = require('ws'); // Importação necessária
+const http = require('http');
+const { WebSocketServer } = require('ws');
+const OpenAI = require('openai');
+const { Readable } = require('stream');
 
-// --- Middleware de Autenticação (Seu código original, sem alterações) ---
+// --- Middleware de Autenticação (Original) ---
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -23,40 +25,35 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
-
-// Criamos uma função principal 'async' para poder usar try/catch na inicialização
 async function main() {
   try {
-    // 2. Inicializações
+    // --- Inicializações ---
     const app = express();
     app.use(cors());
     app.use(express.json());
     const prisma = new PrismaClient();
     const PORT = 3001;
 
-    // --- SUAS ROTAS HTTP ORIGINAIS (SEM NENHUMA ALTERAÇÃO) ---
+    // Inicialização do cliente OpenAI
+    const openai = new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY,
+    });
+
+    // --- ROTAS HTTP ORIGINAIS ---
 
     // ROTA DE CADASTRO
     app.post('/usuarios', async (req, res) => {
       console.log('--- INICIANDO CADASTRO ---');
       try {
-        console.log('Dados recebidos no body:', req.body);
         const { email, password } = req.body;
-        
         if (!password) {
-            console.log('ERRO: Senha não foi fornecida.');
             return res.status(400).json({ message: "O campo 'password' é obrigatório." });
         }
-
         const salt = await bcrypt.genSalt(10);
         const senhaHash = await bcrypt.hash(password, salt);
-        console.log('Senha criptografada (hash):', senhaHash);
-        
         const novoUsuario = await prisma.user.create({
           data: { email: email, senha: senhaHash },
         });
-        
-        console.log('--- CADASTRO BEM-SUCEDIDO ---');
         const usuarioSemSenha = { ...novoUsuario };
         delete usuarioSemSenha.senha;
         res.status(201).json(usuarioSemSenha);
@@ -70,31 +67,19 @@ async function main() {
     app.post('/login', async (req, res) => {
       console.log('--- INICIANDO LOGIN ---');
       try {
-        console.log('Tentativa de login com:', req.body);
         const { email, password } = req.body;
         const usuario = await prisma.user.findUnique({ where: { email: email } });
-        
         if (!usuario) {
-          console.log(`Usuário '${email}' não encontrado no banco.`);
           return res.status(404).json({ message: "Usuário não encontrado." });
         }
-        console.log('Usuário encontrado no banco:', usuario);
-
         if (!usuario.senha || !usuario.senha.startsWith('$2b$')) {
-            console.error(`--- DIAGNÓSTICO FATAL ---`);
             console.error(`O usuário '${email}' tentou logar, mas sua senha no banco de dados NÃO está criptografada.`);
             return res.status(500).json({ message: "Erro crítico de segurança: a senha deste usuário não está criptografada." });
         }
-        
-        console.log('Comparando a senha fornecida com o hash do banco...');
         const senhaCorreta = await bcrypt.compare(password, usuario.senha);
-        
         if (!senhaCorreta) {
-          console.log('Senha incorreta.');
           return res.status(401).json({ message: "Senha incorreta." });
         }
-        
-        console.log('--- LOGIN BEM-SUCEDIDO ---');
         const token = jwt.sign(
           { id: usuario.id, email: usuario.email },
           process.env.JWT_SECRET,
@@ -148,10 +133,7 @@ async function main() {
                 res.json({ message: 'Aula desmarcada como concluída.' });
             } else {
                 await prisma.progressoAula.create({
-                    data: {
-                        userId: userId,
-                        aulaId: parseInt(aulaId),
-                    },
+                    data: { userId: userId, aulaId: parseInt(aulaId) },
                 });
                 res.json({ message: 'Aula marcada como concluída.' });
             }
@@ -163,7 +145,6 @@ async function main() {
     
     // LÓGICA DOS WEBHOOKS
     app.post('/webhooks/compra-aprovada', async (req, res) => {
-      console.log('--- WEBHOOK: COMPRA APROVADA RECEBIDO! ---');
       const { email } = req.body;
       if (!email) {
         return res.status(400).json({ message: 'Email é obrigatório.' });
@@ -172,12 +153,10 @@ async function main() {
         const senhaAleatoria = Math.random().toString(36).slice(-8);
         const salt = await bcrypt.genSalt(10);
         const senhaHash = await bcrypt.hash(senhaAleatoria, salt);
-        const novoUsuario = await prisma.user.create({
+        await prisma.user.create({
           data: { email: email, senha: senhaHash },
         });
-        console.log(`--- USUÁRIO CRIADO VIA WEBHOOK ---`);
-        console.log(`Email: ${novoUsuario.email}`);
-        console.log(`Senha Temporária: ${senhaAleatoria}`);
+        console.log(`Usuário criado via webhook: ${email} com senha temporária: ${senhaAleatoria}`);
         res.status(201).json({ message: 'Usuário criado com sucesso.' });
       } catch (error) {
         if (error.code === 'P2002') {
@@ -187,7 +166,6 @@ async function main() {
       }
     });
     app.post('/webhooks/reembolso', async (req, res) => {
-      console.log('--- WEBHOOK: REEMBOLSO RECEBIDO! ---');
       const { email } = req.body;
       if (!email) {
         return res.status(400).json({ message: 'Email é obrigatório.' });
@@ -208,47 +186,90 @@ async function main() {
     app.post('/delete-all-users', async (req, res) => {
         try {
             const deleted = await prisma.user.deleteMany({});
-            console.log(`--- BANCO DE DADOS LIMPO: ${deleted.count} usuários deletados ---`);
             res.status(200).json({ message: `${deleted.count} usuários foram deletados com sucesso.` });
         } catch (error) {
-            console.error("Erro ao deletar usuários:", error);
             res.status(500).json({ message: "Não foi possível deletar os usuários." });
         }
     });
 
-    // --- FIM DAS SUAS ROTAS HTTP ORIGINAIS ---
 
-
-    // --- NOVA LÓGICA WEBSOCKET ADICIONADA AQUI ---
-    // 1. Criar um servidor HTTP a partir do Express
+    // --- NOVA LÓGICA WEBSOCKET 100% OPENAI ---
     const server = http.createServer(app);
-
-    // 2. Anexar o WebSocket Server ao servidor HTTP
     const wss = new WebSocketServer({ server });
 
     wss.on('connection', (ws) => {
-      console.log('Cliente WebSocket conectado!');
-      
-      // Lógica de simulação "eco" para testar a conexão
-      ws.on('message', (audioChunk) => {
-        if (ws.readyState === ws.OPEN) {
-          // Devolve o mesmo áudio recebido para o cliente
-          ws.send(audioChunk);
-        }
-      });
-      
-      ws.on('close', () => {
-        console.log('Cliente WebSocket desconectado.');
-      });
+        console.log('✅ Cliente WebSocket conectado!');
+        let audioBuffers = [];
+        let conversationHistory = [{
+            role: "system",
+            content: `Você é a "Nina", uma assistente de IA especialista em herbalismo e produtos naturais. Sua personalidade é amigável, prestável e apaixonada pelo mundo natural. Seu foco é exclusivamente em ervas, plantas medicinais, chás e seus benefícios. Se o utilizador perguntar sobre qualquer outro tópico (programação, política, desporto, etc.), recuse educadamente e reforce a sua especialidade. Responda de forma completa, mas concisa.`
+        }];
+        let endOfSpeechTimeout;
 
-      ws.on('error', (error) => {
-        console.error('Erro no WebSocket:', error);
-      });
+        const processAudio = async () => {
+            if (audioBuffers.length === 0) return;
+            console.log('🗣️ Processando áudio...');
+            const audioBuffer = Buffer.concat(audioBuffers);
+            audioBuffers = [];
+
+            try {
+                const audioStream = Readable.from(audioBuffer);
+                const transcription = await openai.audio.transcriptions.create({
+                    file: await OpenAI.toFile(audioStream, 'audio.webm'),
+                    model: 'whisper-1',
+                    language: 'pt'
+                });
+                
+                const userText = transcription.text;
+                if (!userText.trim()) return;
+                console.log(`🎤 Transcrição (Whisper): "${userText}"`);
+                conversationHistory.push({ role: "user", content: userText });
+
+                const completion = await openai.chat.completions.create({
+                    model: "gpt-4o",
+                    messages: conversationHistory,
+                });
+                
+                const gptResponseText = completion.choices[0].message.content;
+                console.log(`🤖 Resposta (GPT-4o): "${gptResponseText}"`);
+                conversationHistory.push({ role: "assistant", content: gptResponseText });
+
+                const mp3 = await openai.audio.speech.create({
+                    model: "tts-1",
+                    voice: "nova",
+                    input: gptResponseText,
+                    response_format: "opus",
+                });
+                
+                const audioResponseBuffer = Buffer.from(await mp3.arrayBuffer());
+                if (ws.readyState === ws.OPEN) {
+                    ws.send(audioResponseBuffer);
+                    console.log('🔊 Áudio da resposta enviado ao cliente.');
+                }
+            } catch (error) {
+                console.error('❌ Erro no pipeline de IA da OpenAI:', error);
+            }
+        };
+
+        ws.on('message', (audioChunk) => {
+            clearTimeout(endOfSpeechTimeout);
+            audioBuffers.push(audioChunk);
+            endOfSpeechTimeout = setTimeout(processAudio, 750);
+        });
+
+        ws.on('close', () => {
+            console.log('❌ Cliente WebSocket desconectado.');
+            clearTimeout(endOfSpeechTimeout);
+        });
+
+        ws.on('error', (error) => {
+            console.error('WebSocket Error:', error);
+            clearTimeout(endOfSpeechTimeout);
+        });
     });
 
-    // 3. Iniciar o servidor unificado (que serve tanto HTTP quanto WebSocket)
     server.listen(PORT, () => {
-      console.log(`✅ Servidor com diagnóstico (HTTP e WebSocket) rodando na porta ${PORT}`);
+        console.log(`✅ Servidor 100% OpenAI (HTTP e WebSocket) a rodar na porta ${PORT}`);
     });
 
   } catch (error) {
