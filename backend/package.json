@@ -16,7 +16,6 @@
     "dotenv": "^17.2.3",
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
-    "microsoft-cognitiveservices-speech-sdk": "^1.46.0",
     "openai": "^6.3.0",
     "ws": "^8.18.3"
   },

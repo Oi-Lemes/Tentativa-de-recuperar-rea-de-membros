@@ -24,7 +24,7 @@ export async function POST(req: Request) {
         const messages = [systemPrompt, ...history, { role: "user", content: message }];
 
         const completion = await openai.chat.completions.create({
-            model: "gpt-4o",
+            model: "gpt-3.5-turbo", // USANDO O MODELO MAIS ACESSÍVEL
             messages: messages,
         });
 

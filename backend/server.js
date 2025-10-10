@@ -11,15 +11,14 @@ const { WebSocketServer } = require('ws');
 const OpenAI = require('openai');
 const { Readable } = require('stream');
 
-// --- Middleware de Autenticação (Original) ---
+// --- Middleware de Autenticação ---
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
-
-  if (token == null) return res.sendStatus(401); // Se não há token, não autorizado
+  if (token == null) return res.sendStatus(401);
 
   jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-    if (err) return res.sendStatus(403); // Se o token não for válido, acesso proibido
+    if (err) return res.sendStatus(403);
     req.user = user;
     next();
   });
@@ -33,13 +32,9 @@ async function main() {
     app.use(express.json());
     const prisma = new PrismaClient();
     const PORT = 3001;
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-    // Inicialização do cliente OpenAI
-    const openai = new OpenAI({
-        apiKey: process.env.OPENAI_API_KEY,
-    });
-
-    // --- ROTAS HTTP ORIGINAIS ---
+    // --- ROTAS HTTP COMPLETAS ---
 
     // ROTA DE CADASTRO
     app.post('/usuarios', async (req, res) => {
@@ -192,8 +187,7 @@ async function main() {
         }
     });
 
-
-    // --- NOVA LÓGICA WEBSOCKET 100% OPENAI ---
+    // --- LÓGICA WEBSOCKET COMPLETA ---
     const server = http.createServer(app);
     const wss = new WebSocketServer({ server });
 
@@ -222,17 +216,24 @@ async function main() {
                 
                 const userText = transcription.text;
                 if (!userText.trim()) return;
-                console.log(`🎤 Transcrição (Whisper): "${userText}"`);
+
+                if (ws.readyState === ws.OPEN) {
+                    ws.send(JSON.stringify({ type: 'user_transcript', text: userText }));
+                }
+                
                 conversationHistory.push({ role: "user", content: userText });
 
                 const completion = await openai.chat.completions.create({
-                    model: "gpt-4o",
+                    model: "gpt-3.5-turbo",
                     messages: conversationHistory,
                 });
                 
                 const gptResponseText = completion.choices[0].message.content;
-                console.log(`🤖 Resposta (GPT-4o): "${gptResponseText}"`);
                 conversationHistory.push({ role: "assistant", content: gptResponseText });
+
+                if (ws.readyState === ws.OPEN) {
+                    ws.send(JSON.stringify({ type: 'assistant_response', text: gptResponseText }));
+                }
 
                 const mp3 = await openai.audio.speech.create({
                     model: "tts-1",
@@ -242,30 +243,26 @@ async function main() {
                 });
                 
                 const audioResponseBuffer = Buffer.from(await mp3.arrayBuffer());
+
                 if (ws.readyState === ws.OPEN) {
                     ws.send(audioResponseBuffer);
-                    console.log('🔊 Áudio da resposta enviado ao cliente.');
                 }
             } catch (error) {
                 console.error('❌ Erro no pipeline de IA da OpenAI:', error);
+                if (ws.readyState === ws.OPEN) {
+                    ws.send(JSON.stringify({ type: 'error', text: 'Desculpe, ocorreu um erro.' }));
+                }
             }
         };
 
-        ws.on('message', (audioChunk) => {
+        ws.on('message', (data) => {
             clearTimeout(endOfSpeechTimeout);
-            audioBuffers.push(audioChunk);
+            audioBuffers.push(data as Buffer);
             endOfSpeechTimeout = setTimeout(processAudio, 750);
         });
 
-        ws.on('close', () => {
-            console.log('❌ Cliente WebSocket desconectado.');
-            clearTimeout(endOfSpeechTimeout);
-        });
-
-        ws.on('error', (error) => {
-            console.error('WebSocket Error:', error);
-            clearTimeout(endOfSpeechTimeout);
-        });
+        ws.on('close', () => console.log('❌ Cliente WebSocket desconectado.'));
+        ws.on('error', (error) => console.error('WebSocket Error:', error));
     });
 
     server.listen(PORT, () => {
