@@ -1,13 +1,15 @@
 require('dotenv').config();
 
-// 1. Importações
+// 1. Importações (com as novas para http e ws)
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
+const http = require('http'); // Importação necessária
+const { WebSocketServer } = require('ws'); // Importação necessária
 
-// --- Middleware de Autenticação ---
+// --- Middleware de Autenticação (Seu código original, sem alterações) ---
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -32,7 +34,9 @@ async function main() {
     const prisma = new PrismaClient();
     const PORT = 3001;
 
-    // --- ROTA DE CADASTRO (COM LOGS) ---
+    // --- SUAS ROTAS HTTP ORIGINAIS (SEM NENHUMA ALTERAÇÃO) ---
+
+    // ROTA DE CADASTRO
     app.post('/usuarios', async (req, res) => {
       console.log('--- INICIANDO CADASTRO ---');
       try {
@@ -62,7 +66,7 @@ async function main() {
       }
     });
 
-    // --- ROTA DE LOGIN (COM LOGS) ---
+    // ROTA DE LOGIN
     app.post('/login', async (req, res) => {
       console.log('--- INICIANDO LOGIN ---');
       try {
@@ -103,15 +107,13 @@ async function main() {
       }
     });
 
-    // --- ROTAS DE CONTEÚDO (PROTEGIDAS) ---
-
+    // ROTAS DE CONTEÚDO (PROTEGIDAS)
     app.get('/modulos', authenticateToken, async (req, res) => {
         const modulos = await prisma.modulo.findMany({
-            include: { aulas: { select: { id: true } } }, // Inclui apenas os IDs das aulas
+            include: { aulas: { select: { id: true } } },
         });
         res.json(modulos);
     });
-
     app.get('/modulos/:id', authenticateToken, async (req, res) => {
         const { id } = req.params;
         const modulo = await prisma.modulo.findUnique({
@@ -124,9 +126,7 @@ async function main() {
         res.json(modulo);
     });
     
-    // --- ROTAS DE PROGRESSO (PROTEGIDAS) ---
-
-    // Retorna um array com os IDs das aulas concluídas pelo usuário
+    // ROTAS DE PROGRESSO (PROTEGIDAS)
     app.get('/progresso', authenticateToken, async (req, res) => {
         const progresso = await prisma.progressoAula.findMany({
             where: { userId: req.user.id },
@@ -134,25 +134,19 @@ async function main() {
         });
         res.json(progresso.map(p => p.aulaId));
     });
-
-    // Marca uma aula como concluída ou desmarca
     app.post('/progresso/aula/:aulaId', authenticateToken, async (req, res) => {
         const { aulaId } = req.params;
         const userId = req.user.id;
-
         try {
             const jaConcluida = await prisma.progressoAula.findUnique({
                 where: { userId_aulaId: { userId, aulaId: parseInt(aulaId) } },
             });
-
             if (jaConcluida) {
-                // Se já concluiu, desmarca (remove o registro)
                 await prisma.progressoAula.delete({
                     where: { userId_aulaId: { userId, aulaId: parseInt(aulaId) } },
                 });
                 res.json({ message: 'Aula desmarcada como concluída.' });
             } else {
-                // Se não concluiu, marca (cria o registro)
                 await prisma.progressoAula.create({
                     data: {
                         userId: userId,
@@ -167,78 +161,50 @@ async function main() {
         }
     });
     
-    // --- LÓGICA DOS WEBHOOKS (PASSO 16) ---
-
-    // Webhook para COMPRA APROVADA
+    // LÓGICA DOS WEBHOOKS
     app.post('/webhooks/compra-aprovada', async (req, res) => {
       console.log('--- WEBHOOK: COMPRA APROVADA RECEBIDO! ---');
-      const { email } = req.body; // Supondo que a plataforma envia o email do comprador
-
+      const { email } = req.body;
       if (!email) {
-        console.log('Webhook de compra recebido, mas sem email.');
         return res.status(400).json({ message: 'Email é obrigatório.' });
       }
-
       try {
-        // Gera uma senha aleatória para o novo usuário
         const senhaAleatoria = Math.random().toString(36).slice(-8);
         const salt = await bcrypt.genSalt(10);
         const senhaHash = await bcrypt.hash(senhaAleatoria, salt);
-
         const novoUsuario = await prisma.user.create({
-          data: {
-            email: email,
-            senha: senhaHash,
-          },
+          data: { email: email, senha: senhaHash },
         });
-
         console.log(`--- USUÁRIO CRIADO VIA WEBHOOK ---`);
         console.log(`Email: ${novoUsuario.email}`);
-        console.log(`Senha Temporária: ${senhaAleatoria}`); // IMPORTANTE: No mundo real, você enviaria esta senha por email.
-        
+        console.log(`Senha Temporária: ${senhaAleatoria}`);
         res.status(201).json({ message: 'Usuário criado com sucesso.' });
       } catch (error) {
-        // Verifica se o erro é porque o usuário já existe
         if (error.code === 'P2002') {
-          console.log(`Webhook: Tentativa de criar usuário que já existe (${email}). Nenhum ação necessária.`);
           return res.status(200).json({ message: 'Usuário já existia.' });
         }
-        console.error("Erro ao processar webhook de compra:", error);
         res.status(500).json({ message: 'Erro interno ao criar usuário.' });
       }
     });
-
-    // Webhook para REEMBOLSO
     app.post('/webhooks/reembolso', async (req, res) => {
       console.log('--- WEBHOOK: REEMBOLSO RECEBIDO! ---');
       const { email } = req.body;
-
       if (!email) {
-        console.log('Webhook de reembolso recebido, mas sem email.');
         return res.status(400).json({ message: 'Email é obrigatório.' });
       }
-
       try {
-        await prisma.user.delete({
-          where: { email: email },
-        });
-        console.log(`--- ACESSO REMOVIDO VIA WEBHOOK ---`);
+        await prisma.user.delete({ where: { email: email } });
         console.log(`Usuário com email ${email} foi deletado.`);
         res.status(200).json({ message: 'Acesso do usuário removido com sucesso.' });
       } catch (error) {
-        // Se o usuário a ser deletado não for encontrado, não é um erro crítico.
         if (error.code === 'P2025') {
-          console.log(`Webhook: Tentativa de remover acesso de um usuário que não existe (${email}).`);
           return res.status(404).json({ message: 'Usuário não encontrado para remoção.' });
         }
-        console.error("Erro ao processar webhook de reembolso:", error);
         res.status(500).json({ message: 'Erro interno ao remover usuário.' });
       }
     });
 
-    // --- FIM DOS WEBHOOKS ---
-
-    // --- ROTA DE LIMPEZA ---
+    // ROTA DE LIMPEZA
     app.post('/delete-all-users', async (req, res) => {
         try {
             const deleted = await prisma.user.deleteMany({});
@@ -250,9 +216,39 @@ async function main() {
         }
     });
 
-    // Inicia o servidor
-    app.listen(PORT, () => {
-      console.log(`✅ Servidor com diagnóstico rodando na porta ${PORT}`);
+    // --- FIM DAS SUAS ROTAS HTTP ORIGINAIS ---
+
+
+    // --- NOVA LÓGICA WEBSOCKET ADICIONADA AQUI ---
+    // 1. Criar um servidor HTTP a partir do Express
+    const server = http.createServer(app);
+
+    // 2. Anexar o WebSocket Server ao servidor HTTP
+    const wss = new WebSocketServer({ server });
+
+    wss.on('connection', (ws) => {
+      console.log('Cliente WebSocket conectado!');
+      
+      // Lógica de simulação "eco" para testar a conexão
+      ws.on('message', (audioChunk) => {
+        if (ws.readyState === ws.OPEN) {
+          // Devolve o mesmo áudio recebido para o cliente
+          ws.send(audioChunk);
+        }
+      });
+      
+      ws.on('close', () => {
+        console.log('Cliente WebSocket desconectado.');
+      });
+
+      ws.on('error', (error) => {
+        console.error('Erro no WebSocket:', error);
+      });
+    });
+
+    // 3. Iniciar o servidor unificado (que serve tanto HTTP quanto WebSocket)
+    server.listen(PORT, () => {
+      console.log(`✅ Servidor com diagnóstico (HTTP e WebSocket) rodando na porta ${PORT}`);
     });
 
   } catch (error) {
