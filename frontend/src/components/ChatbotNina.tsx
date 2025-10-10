@@ -36,20 +36,36 @@ export default function ChatbotNina() {
     }, [messages, isSpeaking]);
 
     const stopRecording = () => {
+        setIsRecording(false);
         if (mediaRecorder.current && mediaRecorder.current.state === "recording") {
             mediaRecorder.current.onstop = () => {
                 if (ws.current?.readyState === WebSocket.OPEN) {
-                    ws.current.send("EOM"); // End Of Message
+                    ws.current.send("EOM");
                 }
-                streamRef.current?.getTracks().forEach(track => track.stop());
             };
             mediaRecorder.current.stop();
         }
+    };
+
+    const disconnect = () => {
         setIsRecording(false);
+        if (mediaRecorder.current && mediaRecorder.current.state === "recording") {
+            mediaRecorder.current.stop();
+        }
+        if (streamRef.current) {
+            streamRef.current.getTracks().forEach(track => track.stop());
+            streamRef.current = null;
+        }
+        if (ws.current) {
+            ws.current.close();
+            ws.current = null;
+        }
+        mediaRecorder.current = null;
     };
     
     const startRecording = async () => {
         if (isRecording || !getSupportedMimeType()) return;
+
         setMessages([]); 
 
         try {
@@ -69,6 +85,13 @@ export default function ChatbotNina() {
                         ws.current.send(event.data);
                     }
                 };
+
+                mediaRecorder.current.onstop = () => {
+                     if (ws.current?.readyState === WebSocket.OPEN) {
+                        ws.current.send("EOM");
+                    }
+                };
+
                 mediaRecorder.current.start(250);
             };
 
@@ -87,13 +110,12 @@ export default function ChatbotNina() {
                             setMessages(prev => [...prev, { role: 'user', text: message.text }]);
                         } else if (message.type === 'assistant_response') {
                              if (audioPlayerRef.current) {
-                                const addAssistantMessage = () => {
+                                const addAssistantMessageOnEnd = () => {
                                     setMessages(prev => [...prev, { role: 'assistant', text: message.text }]);
                                     setIsSpeaking(false);
-                                    // Remove o listener para não ser chamado novamente por outros áudios
-                                    audioPlayerRef.current?.removeEventListener('ended', addAssistantMessage);
+                                    audioPlayerRef.current?.removeEventListener('ended', addAssistantMessageOnEnd);
                                 };
-                                audioPlayerRef.current.addEventListener('ended', addAssistantMessage);
+                                audioPlayerRef.current.addEventListener('ended', addAssistantMessageOnEnd);
                              }
                         }
                     } catch (error) {
@@ -102,11 +124,7 @@ export default function ChatbotNina() {
                 }
             };
 
-            ws.current.onclose = () => {
-                console.log("WebSocket Desconectado.");
-                setIsRecording(false);
-                streamRef.current?.getTracks().forEach(track => track.stop());
-            };
+            ws.current.onclose = () => console.log("WebSocket Desconectado.");
             ws.current.onerror = (err) => console.error("WebSocket Error:", err);
 
         } catch (error) {
@@ -119,14 +137,6 @@ export default function ChatbotNina() {
     const handleCameraClick = () => {
         alert("Funcionalidade de análise de imagem a ser implementada!");
     };
-    
-    const disconnectAndCloseWindow = () => {
-        if (ws.current) {
-            ws.current.close();
-        }
-        setIsOpen(false);
-        setIsRecording(false);
-    };
 
     return (
         <>
@@ -137,13 +147,11 @@ export default function ChatbotNina() {
 
             {isOpen && (
                 <div className="fixed bottom-20 right-4 w-80 h-[500px] bg-gray-800 rounded-lg shadow-2xl flex flex-col z-50">
-                    {/* Cabeçalho */}
                     <div className="bg-gray-900 p-3 flex justify-between items-center rounded-t-lg flex-shrink-0">
                         <h3 className="font-bold text-white">Nina, a sua Herbalista</h3>
-                        <button onClick={disconnectAndCloseWindow} className="text-gray-300 hover:text-white text-2xl leading-none">&times;</button>
+                        <button onClick={() => { disconnect(); setIsOpen(false); }} className="text-gray-300 hover:text-white text-2xl leading-none">&times;</button>
                     </div>
 
-                    {/* Corpo do Chat */}
                     <div ref={chatContainerRef} className="flex-1 p-4 space-y-4 overflow-y-auto">
                         {messages.map((msg, index) => (
                             <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -155,7 +163,6 @@ export default function ChatbotNina() {
                         {isSpeaking && (
                             <div className="flex justify-start">
                                 <div className="p-3 rounded-lg bg-gray-700">
-                                    {/* Animação de "a digitar" */}
                                     <div className="flex items-center space-x-1">
                                         <span className="w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:-0.3s]"></span>
                                         <span className="w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:-0.15s]"></span>
@@ -166,9 +173,8 @@ export default function ChatbotNina() {
                         )}
                     </div>
 
-                    {/* Rodapé com Ícones */}
-                    <div className="p-2 bg-gray-900 flex items-center justify-between rounded-b-lg">
-                        <button onClick={handleCameraClick} className="text-gray-400 hover:text-white p-3">
+                    <div className="p-4 bg-gray-900 flex items-center justify-around rounded-b-lg">
+                        <button onClick={handleCameraClick} className="text-gray-400 hover:text-white p-2">
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                         </button>
                         
@@ -179,7 +185,19 @@ export default function ChatbotNina() {
                             onTouchEnd={stopRecording}
                             className={`p-4 rounded-full transition-transform duration-200 ${isRecording ? 'bg-red-500 scale-110' : 'bg-blue-600'}`}
                         >
-                            <svg className={`w-6 h-6 text-white`} fill="currentColor" viewBox="0 0 20 20"><path d="M7 4a3 3 0 016 0v6a3 3 0 11-6 0V4z"/><path d="M5.5 11.5a5.5 5.5 0 1011 0v-6a5.5 5.5 0 10-11 0v6zM10 20a1 1 0 001-1v-2.065a8.45 8.45 0 005.657-3.238 1 1 0 00-1.58-1.22A6.5 6.5 0 0110 15a6.5 6.5 0 01-4.077-1.523 1 1 0 00-1.58 1.22A8.45 8.45 0 009 16.935V9a1 1 0 001 1z"/></svg>
+                            {/* --- ÍCONE DE MICROFONE ATUALIZADO --- */}
+                            <svg
+                                className="w-8 h-8 text-white"
+                                viewBox="0 0 76 76"
+                                xmlns="http://www.w3.org/2000/svg"
+                                xmlnsXlink="http://www.w3.org/1999/xlink"
+                                version="1.1"
+                                fill="currentColor"
+                                >
+                                <g>
+                                    <path d="M38,51.3c5,0,9-4,9-9V21.5c0-5-4-9-9-9s-9,4-9,9v20.8C29,47.3,33,51.3,38,51.3z M32,21.5c0-3.3,2.7-6,6-6s6,2.7,6,6v20.8   c0,3.3-2.7,6-6,6s-6-2.7-6-6V21.5z M50.4,42.3c0,6.6-5.4,12-12,12s-12-5.4-12-12h-3c0,7.8,6,14.2,13.5,14.9v7.1h3v-7.1   c7.5-0.7,13.5-7,13.5-14.9H50.4z" />
+                                </g>
+                            </svg>
                         </button>
                     </div>
                 </div>
