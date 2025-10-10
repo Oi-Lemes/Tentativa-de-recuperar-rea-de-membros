@@ -11,7 +11,7 @@ const { WebSocketServer } = require('ws');
 const OpenAI = require('openai');
 const { Readable } = require('stream');
 
-// --- Middleware de Autenticação ---
+// --- Middleware de Autenticação (COLE AQUI A SUA FUNÇÃO ORIGINAL) ---
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -33,8 +33,10 @@ async function main() {
     const PORT = 3001;
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-    // --- ROTAS HTTP COMPLETAS ---
+    // --- COLE AQUI TODAS AS SUAS ROTAS HTTP ORIGINAIS (login, modulos, etc.) ---
+    // ROTA DE CADASTRO
     app.post('/usuarios', async (req, res) => {
+      console.log('--- INICIANDO CADASTRO ---');
       try {
         const { email, password } = req.body;
         if (!password) {
@@ -49,11 +51,14 @@ async function main() {
         delete usuarioSemSenha.senha;
         res.status(201).json(usuarioSemSenha);
       } catch (error) {
+        console.error("ERRO GRAVE NO CADASTRO:", error);
         res.status(400).json({ message: "Não foi possível criar o usuário. O e-mail já pode existir." });
       }
     });
 
+    // ROTA DE LOGIN
     app.post('/login', async (req, res) => {
+      console.log('--- INICIANDO LOGIN ---');
       try {
         const { email, password } = req.body;
         const usuario = await prisma.user.findUnique({ where: { email: email } });
@@ -61,6 +66,7 @@ async function main() {
           return res.status(404).json({ message: "Usuário não encontrado." });
         }
         if (!usuario.senha || !usuario.senha.startsWith('$2b$')) {
+            console.error(`O usuário '${email}' tentou logar, mas sua senha no banco de dados NÃO está criptografada.`);
             return res.status(500).json({ message: "Erro crítico de segurança: a senha deste usuário não está criptografada." });
         }
         const senhaCorreta = await bcrypt.compare(password, usuario.senha);
@@ -74,10 +80,12 @@ async function main() {
         );
         res.status(200).json({ token: token });
       } catch (error) {
+        console.error("ERRO GRAVE NO LOGIN:", error);
         res.status(500).json({ message: "Ocorreu um erro inesperado no login." });
       }
     });
 
+    // ROTAS DE CONTEÚDO (PROTEGIDAS)
     app.get('/modulos', authenticateToken, async (req, res) => {
         const modulos = await prisma.modulo.findMany({
             include: { aulas: { select: { id: true } } },
@@ -96,6 +104,7 @@ async function main() {
         res.json(modulo);
     });
     
+    // ROTAS DE PROGRESSO (PROTEGIDAS)
     app.get('/progresso', authenticateToken, async (req, res) => {
         const progresso = await prisma.progressoAula.findMany({
             where: { userId: req.user.id },
@@ -122,10 +131,12 @@ async function main() {
                 res.json({ message: 'Aula marcada como concluída.' });
             }
         } catch (error) {
+            console.error("Erro ao atualizar progresso:", error);
             res.status(500).json({ message: 'Erro ao atualizar progresso.' });
         }
     });
     
+    // LÓGICA DOS WEBHOOKS
     app.post('/webhooks/compra-aprovada', async (req, res) => {
       const { email } = req.body;
       if (!email) {
@@ -138,6 +149,7 @@ async function main() {
         await prisma.user.create({
           data: { email: email, senha: senhaHash },
         });
+        console.log(`Usuário criado via webhook: ${email} com senha temporária: ${senhaAleatoria}`);
         res.status(201).json({ message: 'Usuário criado com sucesso.' });
       } catch (error) {
         if (error.code === 'P2002') {
@@ -153,6 +165,7 @@ async function main() {
       }
       try {
         await prisma.user.delete({ where: { email: email } });
+        console.log(`Usuário com email ${email} foi deletado.`);
         res.status(200).json({ message: 'Acesso do usuário removido com sucesso.' });
       } catch (error) {
         if (error.code === 'P2025') {
@@ -162,6 +175,7 @@ async function main() {
       }
     });
 
+    // ROTA DE LIMPEZA
     app.post('/delete-all-users', async (req, res) => {
         try {
             const deleted = await prisma.user.deleteMany({});
@@ -171,7 +185,7 @@ async function main() {
         }
     });
 
-    // --- LÓGICA WEBSOCKET PARA MODO "LIVE" ---
+    // --- LÓGICA WEBSOCKET ATUALIZADA ---
     const server = http.createServer(app);
     const wss = new WebSocketServer({ server });
 
@@ -180,10 +194,9 @@ async function main() {
         let audioBuffers = [];
         let conversationHistory = [{
             role: "system",
-            content: `Você é a "Nina", uma assistente de IA especialista em herbalismo e produtos naturais. Sua personalidade é amigável, prestável e apaixonada pelo mundo natural. Seu foco é exclusivamente em ervas, plantas medicinais, chás e seus benefícios. Se o utilizador perguntar sobre qualquer outro tópico (programação, política, desporto, etc.), recuse educadamente e reforce a sua especialidade. Responda de forma completa, mas concisa.`
+            content: `Você é a "Nina", uma assistente de IA especialista em herbalismo...` // Seu prompt de sistema
         }];
-        let endOfSpeechTimeout;
-
+        
         const processAudio = async () => {
             if (audioBuffers.length === 0) return;
             console.log('🗣️ Processando áudio...');
@@ -193,7 +206,8 @@ async function main() {
             try {
                 const audioStream = Readable.from(audioBuffer);
                 const transcription = await openai.audio.transcriptions.create({
-                    file: await OpenAI.toFile(audioStream, 'audio.webm'), model: 'whisper-1', language: 'pt'
+                    file: await OpenAI.toFile(audioStream, 'audio.webm'),
+                    model: 'whisper-1', language: 'pt'
                 });
                 
                 const userText = transcription.text;
@@ -226,16 +240,17 @@ async function main() {
         };
 
         ws.on('message', (data) => {
-            clearTimeout(endOfSpeechTimeout);
-            // CORREÇÃO: Removemos a sintaxe de TypeScript 'as Buffer'
-            audioBuffers.push(data);
-            endOfSpeechTimeout = setTimeout(processAudio, 750);
+            // Se a mensagem for a string "EOM", processa o áudio.
+            if (typeof data === 'string' && data === 'EOM') {
+                processAudio();
+            } 
+            // Senão, assume que é um chunk de áudio.
+            else if (Buffer.isBuffer(data)) {
+                audioBuffers.push(data);
+            }
         });
 
-        ws.on('close', () => {
-            clearTimeout(endOfSpeechTimeout);
-            console.log('❌ Cliente WebSocket desconectado.');
-        });
+        ws.on('close', () => console.log('❌ Cliente WebSocket desconectado.'));
         ws.on('error', (error) => console.error('WebSocket Error:', error));
     });
 
