@@ -26,7 +26,6 @@ const authenticateToken = (req, res, next) => {
 
 async function main() {
   try {
-    // --- Inicializações ---
     const app = express();
     app.use(cors());
     app.use(express.json());
@@ -35,10 +34,7 @@ async function main() {
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
     // --- ROTAS HTTP COMPLETAS ---
-
-    // ROTA DE CADASTRO
     app.post('/usuarios', async (req, res) => {
-      console.log('--- INICIANDO CADASTRO ---');
       try {
         const { email, password } = req.body;
         if (!password) {
@@ -53,14 +49,11 @@ async function main() {
         delete usuarioSemSenha.senha;
         res.status(201).json(usuarioSemSenha);
       } catch (error) {
-        console.error("ERRO GRAVE NO CADASTRO:", error);
         res.status(400).json({ message: "Não foi possível criar o usuário. O e-mail já pode existir." });
       }
     });
 
-    // ROTA DE LOGIN
     app.post('/login', async (req, res) => {
-      console.log('--- INICIANDO LOGIN ---');
       try {
         const { email, password } = req.body;
         const usuario = await prisma.user.findUnique({ where: { email: email } });
@@ -68,7 +61,6 @@ async function main() {
           return res.status(404).json({ message: "Usuário não encontrado." });
         }
         if (!usuario.senha || !usuario.senha.startsWith('$2b$')) {
-            console.error(`O usuário '${email}' tentou logar, mas sua senha no banco de dados NÃO está criptografada.`);
             return res.status(500).json({ message: "Erro crítico de segurança: a senha deste usuário não está criptografada." });
         }
         const senhaCorreta = await bcrypt.compare(password, usuario.senha);
@@ -82,12 +74,10 @@ async function main() {
         );
         res.status(200).json({ token: token });
       } catch (error) {
-        console.error("ERRO GRAVE NO LOGIN:", error);
         res.status(500).json({ message: "Ocorreu um erro inesperado no login." });
       }
     });
 
-    // ROTAS DE CONTEÚDO (PROTEGIDAS)
     app.get('/modulos', authenticateToken, async (req, res) => {
         const modulos = await prisma.modulo.findMany({
             include: { aulas: { select: { id: true } } },
@@ -106,7 +96,6 @@ async function main() {
         res.json(modulo);
     });
     
-    // ROTAS DE PROGRESSO (PROTEGIDAS)
     app.get('/progresso', authenticateToken, async (req, res) => {
         const progresso = await prisma.progressoAula.findMany({
             where: { userId: req.user.id },
@@ -133,12 +122,10 @@ async function main() {
                 res.json({ message: 'Aula marcada como concluída.' });
             }
         } catch (error) {
-            console.error("Erro ao atualizar progresso:", error);
             res.status(500).json({ message: 'Erro ao atualizar progresso.' });
         }
     });
     
-    // LÓGICA DOS WEBHOOKS
     app.post('/webhooks/compra-aprovada', async (req, res) => {
       const { email } = req.body;
       if (!email) {
@@ -151,7 +138,6 @@ async function main() {
         await prisma.user.create({
           data: { email: email, senha: senhaHash },
         });
-        console.log(`Usuário criado via webhook: ${email} com senha temporária: ${senhaAleatoria}`);
         res.status(201).json({ message: 'Usuário criado com sucesso.' });
       } catch (error) {
         if (error.code === 'P2002') {
@@ -167,7 +153,6 @@ async function main() {
       }
       try {
         await prisma.user.delete({ where: { email: email } });
-        console.log(`Usuário com email ${email} foi deletado.`);
         res.status(200).json({ message: 'Acesso do usuário removido com sucesso.' });
       } catch (error) {
         if (error.code === 'P2025') {
@@ -177,7 +162,6 @@ async function main() {
       }
     });
 
-    // ROTA DE LIMPEZA
     app.post('/delete-all-users', async (req, res) => {
         try {
             const deleted = await prisma.user.deleteMany({});
@@ -187,7 +171,7 @@ async function main() {
         }
     });
 
-    // --- LÓGICA WEBSOCKET COMPLETA ---
+    // --- LÓGICA WEBSOCKET PARA MODO "LIVE" ---
     const server = http.createServer(app);
     const wss = new WebSocketServer({ server });
 
@@ -209,59 +193,49 @@ async function main() {
             try {
                 const audioStream = Readable.from(audioBuffer);
                 const transcription = await openai.audio.transcriptions.create({
-                    file: await OpenAI.toFile(audioStream, 'audio.webm'),
-                    model: 'whisper-1',
-                    language: 'pt'
+                    file: await OpenAI.toFile(audioStream, 'audio.webm'), model: 'whisper-1', language: 'pt'
                 });
                 
                 const userText = transcription.text;
                 if (!userText.trim()) return;
 
-                if (ws.readyState === ws.OPEN) {
-                    ws.send(JSON.stringify({ type: 'user_transcript', text: userText }));
-                }
+                if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: 'user_transcript', text: userText }));
                 
                 conversationHistory.push({ role: "user", content: userText });
 
                 const completion = await openai.chat.completions.create({
-                    model: "gpt-3.5-turbo",
-                    messages: conversationHistory,
+                    model: "gpt-3.5-turbo", messages: conversationHistory,
                 });
                 
                 const gptResponseText = completion.choices[0].message.content;
                 conversationHistory.push({ role: "assistant", content: gptResponseText });
 
-                if (ws.readyState === ws.OPEN) {
-                    ws.send(JSON.stringify({ type: 'assistant_response', text: gptResponseText }));
-                }
+                if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: 'assistant_response', text: gptResponseText }));
 
                 const mp3 = await openai.audio.speech.create({
-                    model: "tts-1",
-                    voice: "nova",
-                    input: gptResponseText,
-                    response_format: "opus",
+                    model: "tts-1", voice: "nova", input: gptResponseText, response_format: "opus",
                 });
                 
                 const audioResponseBuffer = Buffer.from(await mp3.arrayBuffer());
+                if (ws.readyState === ws.OPEN) ws.send(audioResponseBuffer);
 
-                if (ws.readyState === ws.OPEN) {
-                    ws.send(audioResponseBuffer);
-                }
             } catch (error) {
                 console.error('❌ Erro no pipeline de IA da OpenAI:', error);
-                if (ws.readyState === ws.OPEN) {
-                    ws.send(JSON.stringify({ type: 'error', text: 'Desculpe, ocorreu um erro.' }));
-                }
+                if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: 'error', text: 'Desculpe, ocorreu um erro.' }));
             }
         };
 
         ws.on('message', (data) => {
             clearTimeout(endOfSpeechTimeout);
-            audioBuffers.push(data as Buffer);
+            // CORREÇÃO: Removemos a sintaxe de TypeScript 'as Buffer'
+            audioBuffers.push(data);
             endOfSpeechTimeout = setTimeout(processAudio, 750);
         });
 
-        ws.on('close', () => console.log('❌ Cliente WebSocket desconectado.'));
+        ws.on('close', () => {
+            clearTimeout(endOfSpeechTimeout);
+            console.log('❌ Cliente WebSocket desconectado.');
+        });
         ws.on('error', (error) => console.error('WebSocket Error:', error));
     });
 

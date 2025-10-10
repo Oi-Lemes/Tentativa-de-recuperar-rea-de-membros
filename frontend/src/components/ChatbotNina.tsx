@@ -10,9 +10,7 @@ type Message = {
 
 const getSupportedMimeType = () => {
     const types = ['audio/webm; codecs=opus', 'audio/ogg; codecs=opus', 'audio/webm'];
-    if (typeof MediaRecorder === 'undefined') {
-        return null;
-    }
+    if (typeof MediaRecorder === 'undefined') return null;
     for (const type of types) {
         if (MediaRecorder.isTypeSupported(type)) return type;
     }
@@ -21,60 +19,59 @@ const getSupportedMimeType = () => {
 
 export default function ChatbotNina() {
     const [isOpen, setIsOpen] = useState(false);
-    const [isRecording, setIsRecording] = useState(false);
+    const [status, setStatus] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle');
     const [isSpeaking, setIsSpeaking] = useState(false);
     const [messages, setMessages] = useState<Message[]>([]);
-    
+
     const ws = useRef<WebSocket | null>(null);
     const mediaRecorder = useRef<MediaRecorder | null>(null);
     const streamRef = useRef<MediaStream | null>(null);
     const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
     const chatContainerRef = useRef<HTMLDivElement | null>(null);
-    
-    // Efeito para scrollar para a última mensagem
+    const supportedMimeType = useRef<string | null>(null);
+
+    useEffect(() => {
+        supportedMimeType.current = getSupportedMimeType();
+    }, []);
+
     useEffect(() => {
         if (chatContainerRef.current) {
             chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
         }
     }, [messages, isSpeaking]);
 
-    const stopRecordingAndDisconnect = () => {
-        setIsRecording(false);
-        if (mediaRecorder.current && mediaRecorder.current.state === "recording") {
+    const disconnect = () => {
+        console.log("A desligar a ligação...");
+        if (mediaRecorder.current?.state === "recording") {
             mediaRecorder.current.stop();
         }
-        if (streamRef.current) {
-            streamRef.current.getTracks().forEach(track => track.stop());
-            streamRef.current = null;
-        }
-        if (ws.current) {
-            ws.current.close();
-            ws.current = null;
-        }
-        mediaRecorder.current = null;
+        streamRef.current?.getTracks().forEach(track => track.stop());
+        ws.current?.close();
+        setStatus('idle');
     };
-    
-    const startRecording = async () => {
-        if (isRecording || !getSupportedMimeType()) return;
+
+    const connect = async () => {
+        if (status === 'connected' || status === 'connecting') return;
+
+        setMessages([]);
+        setStatus('connecting');
 
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            streamRef.current = stream;
+            if (!supportedMimeType.current) throw new Error("Gravação não suportada.");
             
+            streamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
             ws.current = new WebSocket('ws://localhost:3001');
-            
+
             ws.current.onopen = () => {
-                console.log("WebSocket Conectado, a iniciar gravação...");
-                setIsRecording(true);
+                console.log("WebSocket Conectado!");
+                setStatus('connected');
                 
-                mediaRecorder.current = new MediaRecorder(streamRef.current!, { mimeType: getSupportedMimeType()! });
-                
+                mediaRecorder.current = new MediaRecorder(streamRef.current!, { mimeType: supportedMimeType.current! });
                 mediaRecorder.current.ondataavailable = (event) => {
                     if (event.data.size > 0 && ws.current?.readyState === WebSocket.OPEN) {
                         ws.current.send(event.data);
                     }
                 };
-
                 mediaRecorder.current.start(250);
             };
 
@@ -87,37 +84,59 @@ export default function ChatbotNina() {
                         audioPlayerRef.current.play();
                     }
                 } else {
-                    try {
-                        const message: { type: string, text: string } = JSON.parse(event.data);
-                        if (message.type === 'user_transcript') {
-                            setMessages(prev => [...prev, { role: 'user', text: message.text }]);
-                        } else if (message.type === 'assistant_response') {
-                             if (audioPlayerRef.current) {
-                                audioPlayerRef.current.onended = () => {
-                                    setMessages(prev => [...prev, { role: 'assistant', text: message.text }]);
-                                    setIsSpeaking(false);
-                                }
-                             }
-                        }
-                    } catch (error) {
-                        console.error("Erro ao processar mensagem de texto:", error);
+                    const message = JSON.parse(event.data);
+                    if (message.type === 'user_transcript') {
+                        setMessages(prev => [...prev, { role: 'user', text: message.text }]);
+                    } else if (message.type === 'assistant_response') {
+                         if (audioPlayerRef.current) {
+                            const addAssistantMessage = () => {
+                                setMessages(prev => [...prev, { role: 'assistant', text: message.text }]);
+                                setIsSpeaking(false);
+                                audioPlayerRef.current?.removeEventListener('ended', addAssistantMessage);
+                            };
+                            audioPlayerRef.current.addEventListener('ended', addAssistantMessage);
+                         }
                     }
                 }
             };
 
-            ws.current.onclose = () => console.log("WebSocket Desconectado.");
-            ws.current.onerror = (err) => console.error("WebSocket Error:", err);
+            ws.current.onclose = () => {
+                console.log("WebSocket Desconectado.");
+                // Assegura que o estado seja 'idle' se a conexão for fechada por qualquer motivo
+                if (status !== 'idle') {
+                    disconnect();
+                }
+            };
+            ws.current.onerror = (err) => {
+                console.error("WebSocket Error:", err);
+                disconnect();
+                setStatus('error');
+            };
 
         } catch (error) {
-            console.error("Erro ao iniciar gravação:", error);
-            alert("Não foi possível aceder ao microfone. Verifique as permissões.");
-            setIsRecording(false);
+            console.error("Erro ao iniciar ligação:", error);
+            alert("Não foi possível aceder ao microfone.");
+            setStatus('error');
         }
     };
 
-    const handleCameraClick = () => {
-        alert("Funcionalidade de análise de imagem a ser implementada!");
+    const handleToggleConversation = () => {
+        if (status === 'connected' || status === 'connecting') {
+            disconnect();
+        } else {
+            connect();
+        }
     };
+
+    const handleCameraClick = () => alert("Funcionalidade de análise de imagem a ser implementada!");
+    
+    const getButtonState = () => {
+        if (status === 'connecting') return { text: "A ligar...", color: "bg-yellow-500", disabled: true };
+        if (status === 'connected') return { text: "Terminar Conversa", color: "bg-red-500 hover:bg-red-600", disabled: false };
+        if (status === 'error') return { text: "Erro. Tentar novamente?", color: "bg-gray-500 hover:bg-gray-600", disabled: false };
+        return { text: "Falar com a Nina", color: "bg-blue-600 hover:bg-blue-700" };
+    };
+    const buttonState = getButtonState();
 
     return (
         <>
@@ -130,7 +149,7 @@ export default function ChatbotNina() {
                 <div className="fixed bottom-20 right-4 w-80 h-[500px] bg-gray-800 rounded-lg shadow-2xl flex flex-col z-50">
                     <div className="bg-gray-900 p-3 flex justify-between items-center rounded-t-lg flex-shrink-0">
                         <h3 className="font-bold text-white">Nina, a sua Herbalista</h3>
-                        <button onClick={() => { stopRecordingAndDisconnect(); setIsOpen(false); }} className="text-gray-300 hover:text-white text-2xl leading-none">&times;</button>
+                        <button onClick={() => { disconnect(); setIsOpen(false); }} className="text-gray-300 hover:text-white text-2xl leading-none">&times;</button>
                     </div>
 
                     <div ref={chatContainerRef} className="flex-1 p-4 space-y-4 overflow-y-auto">
@@ -141,29 +160,33 @@ export default function ChatbotNina() {
                                 </div>
                             </div>
                         ))}
-                        {isSpeaking && messages[messages.length -1]?.role !== 'assistant' && (
-                            <div className="flex justify-start">
+                        {isSpeaking && (
+                             <div className="flex justify-start">
                                 <div className="p-3 rounded-lg bg-gray-700">
-                                    <span className="animate-pulse">...</span>
+                                    <div className="flex items-center space-x-1">
+                                        <span className="w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:-0.3s]"></span>
+                                        <span className="w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:-0.15s]"></span>
+                                        <span className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></span>
+                                    </div>
                                 </div>
                             </div>
                         )}
                     </div>
 
-                    <div className="p-4 bg-gray-900/50 flex items-center justify-around rounded-b-lg">
-                        <button onClick={handleCameraClick} className="text-gray-400 hover:text-white p-2">
+                    <div className="p-2 bg-gray-900 flex items-center justify-between rounded-b-lg">
+                        <button onClick={handleCameraClick} className="text-gray-400 hover:text-white p-3">
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                         </button>
                         
                         <button 
-                            onMouseDown={startRecording}
-                            onMouseUp={stopRecordingAndDisconnect}
-                            onTouchStart={(e) => { e.preventDefault(); startRecording(); }}
-                            onTouchEnd={stopRecordingAndDisconnect}
-                            className={`p-4 rounded-full transition-transform duration-200 ${isRecording ? 'bg-red-500 scale-110' : 'bg-blue-600'}`}
+                            onClick={handleToggleConversation}
+                            disabled={buttonState.disabled}
+                            className={`px-6 py-3 rounded-md font-bold text-white transition-colors ${buttonState.color}`}
                         >
-                            <svg className={`w-6 h-6 text-white`} fill="currentColor" viewBox="0 0 20 20"><path d="M7 4a3 3 0 016 0v6a3 3 0 11-6 0V4z"/><path d="M5.5 11.5a5.5 5.5 0 1011 0v-6a5.5 5.5 0 10-11 0v6zM10 20a1 1 0 001-1v-2.065a8.45 8.45 0 005.657-3.238 1 1 0 00-1.58-1.22A6.5 6.5 0 0110 15a6.5 6.5 0 01-4.077-1.523 1 1 0 00-1.58 1.22A8.45 8.45 0 009 16.935V9a1 1 0 001 1z"/></svg>
+                            {buttonState.text}
                         </button>
+
+                        <div className="w-12"></div> {/* Espaço para alinhar o botão central */}
                     </div>
                 </div>
             )}
