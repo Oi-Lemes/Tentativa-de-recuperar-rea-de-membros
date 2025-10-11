@@ -14,7 +14,7 @@ const ProgressCircle = ({ percentage }: { percentage: number }) => {
     const normalizedRadius = radius - strokeWidth / 2;
     const circumference = normalizedRadius * 2 * Math.PI;
     const strokeDashoffset = circumference - (percentage / 100) * circumference;
-  
+
     const getColor = () => {
         if (percentage < 33) return '#f56565'; // Vermelho
         if (percentage < 66) return '#ecc94b'; // Amarelo
@@ -87,7 +87,7 @@ export default function AdminLayout({
             setProgressoTotal(0);
         }
 
-    } catch (error) { // <-- O ERRO ESTAVA AQUI, AGORA CORRIGIDO
+    } catch (error) {
         console.error("Erro ao buscar progresso total:", error);
     }
   };
@@ -99,35 +99,35 @@ export default function AdminLayout({
     } else {
         fetchProgressData();
     }
-    
+
     window.addEventListener('storage', fetchProgressData);
 
     return () => {
       window.removeEventListener('storage', fetchProgressData);
     };
   }, [router]);
-  
+
   const handleLogout = () => {
     localStorage.removeItem('token');
     router.push('/');
   };
 
   return (
-    <div className="flex min-h-screen bg-gray-900 text-white">
+    <div className="flex min-h-screen bg-transparent text-white">
       {/* Barra Lateral (Sidebar) */}
-      <aside className="w-72 bg-gray-800 p-6 flex flex-col">
+      <aside className="w-72 bg-gray-800/80 backdrop-blur-sm p-6 flex flex-col shadow-lg">
         <div className="flex flex-col items-center mb-10">
             <ProgressCircle percentage={progressoTotal} />
             <h2 className="text-xl font-bold mt-4">Progresso Total</h2>
         </div>
 
         <nav className="flex flex-col space-y-2">
-          <Link href="/dashboard" className="text-lg text-gray-300 hover:text-white p-2 rounded-md hover:bg-gray-700">
+          <Link href="/dashboard" className="text-lg text-gray-300 hover:text-white p-2 rounded-md hover:bg-gray-700/50">
             Início / Módulos
           </Link>
         </nav>
 
-        <button 
+        <button
           onClick={handleLogout}
           className="mt-auto w-full px-4 py-2 font-bold text-white bg-red-600 rounded-md hover:bg-red-700"
         >
@@ -135,14 +135,11 @@ export default function AdminLayout({
         </button>
       </aside>
 
-      {/* Conteúdo Principal da Página (com a imagem de fundo) */}
-      <main 
-        className="flex-1 p-12 bg-cover bg-center" 
-        style={{ backgroundImage: "url('/img/fundo.png')" }}
-      >
+      {/* Conteúdo Principal da Página (agora transparente) */}
+      <main className="flex-1 p-12">
         {children}
       </main>
-      
+
       <ChatbotNina />
     </div>
   );

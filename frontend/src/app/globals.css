@@ -28,21 +28,19 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 
-  /* --- CORREÇÃO DEFINITIVA USANDO CAMADAS DE BACKGROUND --- */
-
-  /* O CSS permite aplicar múltiplas imagens de fundo em camadas. */
-  /* Camada 1 (a primeira) fica no topo: É um gradiente de cor semi-transparente. */
-  /* Camada 2 (a segunda): É a sua imagem. */
-  background-image: 
-    linear-gradient(rgba(10, 10, 10, 0.75), rgba(10, 10, 10, 0.75)),
-    url('/img/fundo.png');
+  /* --- EFEITO PARALLAX E IMAGEM DE FUNDO CORRETA --- */
   
-  /* Propriedades para garantir que a imagem cubra a tela */
+  /* Voltando a usar a imagem de fundo original 'fundo.png' */
+  background-image: linear-gradient(rgba(10, 10, 10, 0.75), rgba(10, 10, 10, 0.75)), url('/img/fundo.png');
+  
+  /* Garante que a imagem cubra toda a área */
   background-size: cover;
   background-position: center center;
-  background-repeat: no-repeat;
-  background-attachment: fixed;
   
-  /* Cor de fundo sólida para o caso de a imagem não carregar */
+  /* A "mágica" do parallax acontece aqui */
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+  
+  /* Cor de fundo sólida caso a imagem não carregue */
   background-color: #0a0a0a;
 }

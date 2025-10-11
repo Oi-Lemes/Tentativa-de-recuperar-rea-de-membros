@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 
 // Tipos para os dados que virão da API
 interface Aula {
@@ -16,43 +17,39 @@ interface Modulo {
 
 // Componente para o Círculo de Progresso (sem alterações)
 const ProgressCircle = ({ percentage }: { percentage: number }) => {
-  const strokeWidth = 10;
-  const radius = 50;
+  const strokeWidth = 8;
+  const radius = 35;
   const normalizedRadius = radius - strokeWidth / 2;
   const circumference = normalizedRadius * 2 * Math.PI;
   const strokeDashoffset = circumference - (percentage / 100) * circumference;
 
   return (
-    <svg height={radius * 2} width={radius * 2} className="-rotate-90">
-      <circle
-        stroke="#4a5568"
-        fill="transparent"
-        strokeWidth={strokeWidth}
-        r={normalizedRadius}
-        cx={radius}
-        cy={radius}
-      />
-      <circle
-        stroke="#4299e1" // Cor azul para o progresso
-        fill="transparent"
-        strokeWidth={strokeWidth}
-        strokeDasharray={`${circumference} ${circumference}`}
-        style={{ strokeDashoffset }}
-        r={normalizedRadius}
-        cx={radius}
-        cy={radius}
-        strokeLinecap="round"
-      />
-      <text
-        x="50%"
-        y="50%"
-        textAnchor="middle"
-        dy=".3em"
-        className="text-xl font-bold fill-white rotate-90"
-      >
-        {`${Math.round(percentage)}%`}
-      </text>
-    </svg>
+    <div className="absolute top-3 right-3">
+      <svg height={radius * 2} width={radius * 2} className="-rotate-90">
+        <circle
+          stroke="rgba(0, 0, 0, 0.5)"
+          fill="transparent"
+          strokeWidth={strokeWidth}
+          r={normalizedRadius}
+          cx={radius}
+          cy={radius}
+        />
+        <circle
+          stroke="#FFD700" // Dourado para o progresso
+          fill="transparent"
+          strokeWidth={strokeWidth}
+          strokeDasharray={`${circumference} ${circumference}`}
+          style={{ strokeDashoffset, transition: 'stroke-dashoffset 0.5s ease-out' }}
+          r={normalizedRadius}
+          cx={radius}
+          cy={radius}
+          strokeLinecap="round"
+        />
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <span className="text-sm font-bold text-white">{`${Math.round(percentage)}%`}</span>
+      </div>
+    </div>
   );
 };
 
@@ -66,7 +63,6 @@ export default function DashboardPage() {
       if (!token) return;
 
       try {
-        // Busca os módulos e o progresso em paralelo
         const [modulosRes, progressoRes] = await Promise.all([
           fetch('http://localhost:3001/modulos', {
             headers: { 'Authorization': `Bearer ${token}` }
@@ -90,52 +86,67 @@ export default function DashboardPage() {
 
   const getProgressoModulo = (modulo: Modulo) => {
     if (!modulo || modulo.aulas.length === 0) return 0;
-    
+
     const aulasDoModuloIds = modulo.aulas.map(a => a.id);
     const concluidasNesteModulo = aulasDoModuloIds.filter(id => aulasConcluidas.includes(id));
-    
+
     return (concluidasNesteModulo.length / aulasDoModuloIds.length) * 100;
   };
 
   return (
     <section>
-      <h2 className="text-2xl font-semibold mb-6">Meus Módulos</h2>
+      <h2 className="text-4xl font-bold mb-8 text-center text-white" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.7)' }}>
+        Área de Membros
+      </h2>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {modulos.map((modulo, index) => {
           const progresso = getProgressoModulo(modulo);
           const progressoAnterior = index > 0 ? getProgressoModulo(modulos[index - 1]) : 100;
           const isLocked = index > 0 && progressoAnterior < 100;
+          
+          // --- ALTERAÇÃO AQUI ---
+          // Usando a imagem de fundo existente como placeholder para todos os módulos
+          const imageUrl = '/img/fundo.png';
 
           return (
-            <div
+            <Link
               key={modulo.id}
-              className={`bg-gray-800 rounded-lg p-6 flex flex-col transition-all duration-300 ${
-                isLocked ? 'opacity-50' : 'hover:shadow-lg hover:shadow-blue-500/20'
-              }`}
+              href={isLocked ? '#' : `/modulo/${modulo.id}`}
+              className={`
+                group relative block rounded-lg overflow-hidden transition-all duration-300 transform
+                ${isLocked
+                  ? 'cursor-not-allowed filter grayscale'
+                  : 'hover:scale-105 hover:shadow-2xl hover:shadow-amber-500/40'
+                }
+              `}
             >
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h3 className="text-xl font-bold">{modulo.title}</h3>
-                  <p className="text-gray-400 text-sm">{modulo.description}</p>
-                </div>
-                <div className="flex-shrink-0">
-                  <ProgressCircle percentage={progresso} />
-                </div>
+              <div className="relative w-full h-80">
+                <Image
+                  src={imageUrl}
+                  alt={modulo.title}
+                  layout="fill"
+                  objectFit="cover"
+                  className="transition-transform duration-500 group-hover:scale-110"
+                />
+                {/* Overlay gradiente */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent"></div>
               </div>
 
-              {isLocked ? (
-                <div className="mt-auto pt-4 border-t border-gray-700 text-center text-gray-400">
-                  Conclua o módulo anterior para desbloquear
+              <div className="absolute bottom-0 left-0 p-6 text-white w-full">
+                <h3 className="text-2xl font-bold uppercase tracking-wider">{modulo.title}</h3>
+                <p className="text-gray-300 text-sm">{modulo.description}</p>
+              </div>
+
+              {!isLocked && <ProgressCircle percentage={progresso} />}
+
+              {isLocked && (
+                <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center p-4 text-center">
+                   <svg className="w-10 h-10 mb-2 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                  <span className="font-bold">BLOQUEADO</span>
+                  <span className="text-xs">Conclua o módulo anterior</span>
                 </div>
-              ) : (
-                <Link
-                  href={`/modulo/${modulo.id}`}
-                  className="mt-auto pt-4 border-t border-gray-700 text-center text-blue-400 font-bold hover:underline"
-                >
-                  Acessar Módulo
-                </Link>
               )}
-            </div>
+            </Link>
           );
         })}
       </div>
