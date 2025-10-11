@@ -204,6 +204,8 @@ async function main() {
             audioBuffers = [];
 
             try {
+                // Etapa 1: Transcrição (Audio-para-Texto)
+                console.log('1/4 - Enviando para transcrição (Whisper)...');
                 const audioStream = Readable.from(audioBuffer);
                 const transcription = await openai.audio.transcriptions.create({
                     file: await OpenAI.toFile(audioStream, 'audio.webm'),
@@ -211,12 +213,15 @@ async function main() {
                 });
                 
                 const userText = transcription.text;
+                console.log(`2/4 - Texto transcrito: "${userText}"`);
                 if (!userText.trim()) return;
 
                 if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: 'user_transcript', text: userText }));
                 
                 conversationHistory.push({ role: "user", content: userText });
 
+                // Etapa 2: Chat (Obter resposta do GPT)
+                console.log('3/4 - Enviando para o GPT-3.5-Turbo...');
                 const completion = await openai.chat.completions.create({
                     model: "gpt-3.5-turbo", messages: conversationHistory,
                 });
@@ -226,16 +231,22 @@ async function main() {
 
                 if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: 'assistant_response', text: gptResponseText }));
 
+                // Etapa 3: Síntese de Voz (Texto-para-Áudio)
+                console.log('4/4 - Gerando áudio de resposta (TTS)...');
                 const mp3 = await openai.audio.speech.create({
                     model: "tts-1", voice: "nova", input: gptResponseText, response_format: "opus",
                 });
                 
                 const audioResponseBuffer = Buffer.from(await mp3.arrayBuffer());
                 if (ws.readyState === ws.OPEN) ws.send(audioResponseBuffer);
+                console.log('✅ Pipeline concluído com sucesso!');
 
             } catch (error) {
-                console.error('❌ Erro no pipeline de IA da OpenAI:', error);
-                if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: 'error', text: 'Desculpe, ocorreu um erro.' }));
+                // --- ESTA É A PARTE MODIFICADA E MAIS IMPORTANTE ---
+                console.error('❌ ERRO DETALHADO NO PIPELINE DE IA DA OPENAI:');
+                console.error(error); // Isto vai imprimir o objeto de erro completo!
+                // --- FIM DA MODIFICAÇÃO ---
+                if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: 'error', text: 'Desculpe, ocorreu um erro no servidor.' }));
             }
         };
 
