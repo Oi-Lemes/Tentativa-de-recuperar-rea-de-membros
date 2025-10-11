@@ -11,7 +11,7 @@ const { WebSocketServer } = require('ws');
 const OpenAI = require('openai');
 const { Readable } = require('stream');
 
-// --- Middleware de Autenticação (COLE AQUI A SUA FUNÇÃO ORIGINAL) ---
+// --- Middleware de Autenticação ---
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -33,7 +33,7 @@ async function main() {
     const PORT = 3001;
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-    // --- COLE AQUI TODAS AS SUAS ROTAS HTTP ORIGINAIS (login, modulos, etc.) ---
+    // --- Rotas HTTP (sem alterações) ---
     // ROTA DE CADASTRO
     app.post('/usuarios', async (req, res) => {
       console.log('--- INICIANDO CADASTRO ---');
@@ -185,7 +185,8 @@ async function main() {
         }
     });
 
-    // --- LÓGICA WEBSOCKET ATUALIZADA ---
+
+    // --- LÓGICA WEBSOCKET ATUALIZADA COM DEBUG ---
     const server = http.createServer(app);
     const wss = new WebSocketServer({ server });
 
@@ -234,7 +235,7 @@ async function main() {
                 // Etapa 3: Síntese de Voz (Texto-para-Áudio)
                 console.log('4/4 - Gerando áudio de resposta (TTS)...');
                 const mp3 = await openai.audio.speech.create({
-                    model: "tts-1", voice: "nova", input: gptResponseText, response_format: "opus",
+                    model: "tts-1", voice: "nova", input: gptResponseText, response_format: "mp3",
                 });
                 
                 const audioResponseBuffer = Buffer.from(await mp3.arrayBuffer());
@@ -242,22 +243,34 @@ async function main() {
                 console.log('✅ Pipeline concluído com sucesso!');
 
             } catch (error) {
-                // --- ESTA É A PARTE MODIFICADA E MAIS IMPORTANTE ---
                 console.error('❌ ERRO DETALHADO NO PIPELINE DE IA DA OPENAI:');
-                console.error(error); // Isto vai imprimir o objeto de erro completo!
-                // --- FIM DA MODIFICAÇÃO ---
+                console.error(error);
                 if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: 'error', text: 'Desculpe, ocorreu um erro no servidor.' }));
             }
         };
 
         ws.on('message', (data) => {
-            // Se a mensagem for a string "EOM", processa o áudio.
+            // --- INÍCIO DO NOVO CÓDIGO DE DEBUG ---
+            console.log(`--- MENSAGEM RECEBIDA ---`);
+            console.log(`Tipo de dado: ${typeof data}`);
+            console.log(`É um Buffer? ${Buffer.isBuffer(data)}`);
+            if (Buffer.isBuffer(data)) {
+                console.log(`Tamanho do Buffer: ${data.length} bytes`);
+            } else {
+                console.log(`Conteúdo (se não for buffer): ${data.toString()}`);
+            }
+            // --- FIM DO NOVO CÓDIGO DE DEBUG ---
+
             if (typeof data === 'string' && data === 'EOM') {
+                console.log("✅ Sinal 'EOM' recebido! A iniciar processamento de áudio...");
                 processAudio();
             } 
-            // Senão, assume que é um chunk de áudio.
             else if (Buffer.isBuffer(data)) {
                 audioBuffers.push(data);
+                // console.log(`Chunk de áudio adicionado. Total de chunks: ${audioBuffers.length}`); // Log opcional
+            } else {
+                // Adicionado para capturar casos inesperados
+                console.warn("Aviso: Recebido um tipo de dado inesperado via WebSocket. Ignorando.", data);
             }
         });
 

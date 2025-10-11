@@ -1,13 +1,15 @@
 // Caminho: frontend/src/components/ChatbotNina.tsx
 "use client";
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 
+// Tipos
 type Message = {
     role: 'user' | 'assistant';
     text: string;
 };
 
+// Função auxiliar para encontrar um tipo de MIME suportado
 const getSupportedMimeType = () => {
     const types = ['audio/webm; codecs=opus', 'audio/ogg; codecs=opus', 'audio/webm'];
     if (typeof MediaRecorder === 'undefined') return null;
@@ -17,42 +19,30 @@ const getSupportedMimeType = () => {
     return null;
 };
 
+// O Componente do Chatbot
 export default function ChatbotNina() {
+    // --- Estados do Componente ---
     const [isOpen, setIsOpen] = useState(false);
     const [isRecording, setIsRecording] = useState(false);
-    const [isLocked, setIsLocked] = useState(false);
     const [isSpeaking, setIsSpeaking] = useState(false);
     const [messages, setMessages] = useState<Message[]>([]);
     
+    // --- Refs para persistir valores entre renderizações ---
     const ws = useRef<WebSocket | null>(null);
     const mediaRecorder = useRef<MediaRecorder | null>(null);
     const streamRef = useRef<MediaStream | null>(null);
     const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
     const chatContainerRef = useRef<HTMLDivElement | null>(null);
-    const dragStartY = useRef(0);
     
+    // Efeito para rolar o chat para baixo quando novas mensagens aparecem
     useEffect(() => {
         if (chatContainerRef.current) {
             chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
         }
     }, [messages, isSpeaking]);
 
-    const stopRecordingAndSend = () => {
-        setIsRecording(false);
-        setIsLocked(false);
-        if (mediaRecorder.current && mediaRecorder.current.state === "recording") {
-            mediaRecorder.current.onstop = () => {
-                if (ws.current?.readyState === WebSocket.OPEN) {
-                    ws.current.send("EOM");
-                }
-            };
-            mediaRecorder.current.stop();
-        }
-    };
-    
-    const disconnect = () => {
-        setIsRecording(false);
-        setIsLocked(false);
+    // --- Função de Desconexão e Limpeza ---
+    const disconnect = useCallback(() => {
         if (mediaRecorder.current && mediaRecorder.current.state === "recording") {
             mediaRecorder.current.stop();
         }
@@ -65,9 +55,19 @@ export default function ChatbotNina() {
             ws.current = null;
         }
         mediaRecorder.current = null;
-    };
+        setIsRecording(false);
+    }, []);
+
+    // --- Função para Parar a Gravação ---
+    const stopRecording = useCallback(() => {
+        if (mediaRecorder.current && mediaRecorder.current.state === "recording") {
+            mediaRecorder.current.stop();
+        }
+        // O estado de 'isRecording' será atualizado para 'false' no onstop, para garantir que o EOM foi enviado
+    }, []);
     
-    const startRecording = async () => {
+    // --- Função para Iniciar a Gravação ---
+    const startRecording = useCallback(async () => {
         if (isRecording || !getSupportedMimeType()) return;
 
         setMessages([]); 
@@ -79,18 +79,26 @@ export default function ChatbotNina() {
             ws.current = new WebSocket('ws://localhost:3001');
             
             ws.current.onopen = () => {
-                console.log("WebSocket Conectado, a iniciar gravação...");
-                setIsRecording(true);
+                const mimeType = getSupportedMimeType()!;
+                const recorder = new MediaRecorder(streamRef.current!, { mimeType });
+                mediaRecorder.current = recorder;
                 
-                mediaRecorder.current = new MediaRecorder(streamRef.current!, { mimeType: getSupportedMimeType()! });
-                
-                mediaRecorder.current.ondataavailable = (event) => {
+                recorder.ondataavailable = (event) => {
                     if (event.data.size > 0 && ws.current?.readyState === WebSocket.OPEN) {
                         ws.current.send(event.data);
                     }
                 };
 
-                mediaRecorder.current.start(250);
+                recorder.onstop = () => {
+                    if (ws.current?.readyState === WebSocket.OPEN) {
+                        ws.current.send("EOM");
+                    }
+                    streamRef.current?.getTracks().forEach(track => track.stop());
+                    setIsRecording(false); // Atualiza o estado aqui para garantir sincronia
+                };
+
+                recorder.start(250);
+                setIsRecording(true);
             };
 
             ws.current.onmessage = (event) => {
@@ -103,7 +111,7 @@ export default function ChatbotNina() {
                     }
                 } else {
                     try {
-                        const message: { type: string, text: string } = JSON.parse(event.data);
+                        const message = JSON.parse(event.data);
                         if (message.type === 'user_transcript') {
                             setMessages(prev => [...prev, { role: 'user', text: message.text }]);
                         } else if (message.type === 'assistant_response') {
@@ -117,48 +125,32 @@ export default function ChatbotNina() {
                              }
                         }
                     } catch (error) {
-                        console.error("Erro ao processar mensagem de texto:", error);
+                        console.error("Erro ao processar mensagem de texto do backend:", error);
                     }
                 }
             };
 
-            ws.current.onclose = () => console.log("WebSocket Desconectado.");
-            ws.current.onerror = (err) => console.error("WebSocket Error:", err);
+            ws.current.onclose = () => { setIsRecording(false); };
+            ws.current.onerror = (err) => { console.error("CLIENTE: WebSocket Error:", err); setIsRecording(false); };
 
         } catch (error) {
-            console.error("Erro ao iniciar gravação:", error);
             alert("Não foi possível aceder ao microfone. Verifique as permissões.");
             setIsRecording(false);
         }
-    };
-    
-    const handleTouchStart = (e: React.TouchEvent<HTMLButtonElement>) => {
-        e.preventDefault();
-        dragStartY.current = e.touches[0].clientY;
-        startRecording();
-    };
+    }, [isRecording]);
 
-    const handleTouchMove = (e: React.TouchEvent<HTMLButtonElement>) => {
-        if (!isRecording || isLocked) return;
-        const currentY = e.touches[0].clientY;
-        if (dragStartY.current - currentY > 50) { // Deslizou 50px para cima
-            setIsLocked(true);
+    // --- NOVA LÓGICA: Clique único para alternar gravação ---
+    const handleMicClick = () => {
+        if (isRecording) {
+            stopRecording();
+        } else {
+            startRecording();
         }
     };
     
-    const handleTouchEnd = () => {
-        if (!isLocked) {
-            stopRecordingAndSend();
-        }
-    };
-
-    const handleCameraClick = () => {
-        alert("Funcionalidade de análise de imagem a ser implementada!");
-    };
-
     return (
         <>
-            <audio ref={audioPlayerRef} className="hidden" />
+            <audio ref={audioPlayerRef} className="hidden" onEnded={() => setIsSpeaking(false)} />
             <button onClick={() => setIsOpen(prev => !prev)} className="fixed bottom-4 right-4 bg-blue-600 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:bg-blue-700 transition-transform hover:scale-110 z-50 text-2xl">
                 🌿
             </button>
@@ -174,8 +166,7 @@ export default function ChatbotNina() {
                         {messages.length === 0 && !isRecording && (
                              <div className="flex flex-col items-center justify-center h-full text-center text-gray-400">
                                 <svg className="w-16 h-16 mb-4" viewBox="0 0 76 76" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><g><path d="M38,51.3c5,0,9-4,9-9V21.5c0-5-4-9-9-9s-9,4-9-9v20.8C29,47.3,33,51.3,38,51.3z M32,21.5c0-3.3,2.7-6,6-6s6,2.7,6,6v20.8   c0,3.3-2.7,6-6,6s-6-2.7-6-6V21.5z M50.4,42.3c0,6.6-5.4,12-12,12s-12-5.4-12-12h-3c0,7.8,6,14.2,13.5,14.9v7.1h3v-7.1   c7.5-0.7,13.5-7,13.5-14.9H50.4z" /></g></svg>
-                                <p>Mantenha pressionado para falar.</p>
-                                <p className="text-xs mt-1">Arraste para cima para travar a gravação.</p>
+                                <p>Clique no microfone para falar.</p>
                             </div>
                         )}
                         {messages.map((msg, index) => (
@@ -198,47 +189,33 @@ export default function ChatbotNina() {
                         )}
                     </div>
                     
-                    <div className="relative p-4 bg-gray-900 flex items-center justify-around rounded-b-lg">
-                       {isRecording && (
-                           <div className="absolute bottom-24 left-1/2 -translate-x-1/2 flex flex-col items-center justify-center transition-opacity duration-300">
-                                <div className={`p-2 rounded-full bg-gray-700 ${isLocked ? 'opacity-0' : 'opacity-100'}`}>
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
-                                </div>
-                               <div className="mt-2 p-3 rounded-full bg-gray-700">
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                               </div>
-                           </div>
-                       )}
-
-                        <button onClick={handleCameraClick} className="text-gray-400 hover:text-white p-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                    {/* --- NOVO LAYOUT DO RODAPÉ --- */}
+                    <div className="p-4 bg-gray-900 flex items-center justify-between rounded-b-lg">
+                        {/* Ícone do Microfone à Esquerda */}
+                        <button 
+                            onClick={handleMicClick}
+                            className={`p-3 rounded-full transition-colors duration-200 ${
+                                isRecording 
+                                ? 'bg-red-500 animate-pulse' 
+                                : 'bg-blue-600'
+                            }`}
+                        >
+                            <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M12 14C13.6569 14 15 12.6569 15 11V5C15 3.34315 13.6569 2 12 2C10.3431 2 9 3.34315 9 5V11C9 12.6569 10.3431 14 12 14Z" />
+                                <path d="M18 11C18 14.3137 15.3137 17 12 17C8.68629 17 6 14.3137 6 11H4C4 15.4183 7.58172 19 12 19V22H13V19C17.4183 19 21 15.4183 21 11H18Z" />
+                            </svg>
                         </button>
-                        
-                        {isLocked ? (
-                             <button onClick={stopRecordingAndSend} className="p-4 rounded-full bg-green-500">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
-                            </button>
-                        ) : (
-                            <button 
-                                onMouseDown={startRecording}
-                                onMouseUp={handleTouchEnd}
-                                onTouchStart={handleTouchStart}
-                                onTouchMove={handleTouchMove}
-                                onTouchEnd={handleTouchEnd}
-                                className={`p-4 rounded-full transition-transform duration-200 ${isRecording ? 'bg-red-500 scale-110 animate-pulse' : 'bg-blue-600'}`}
-                            >
-                                <svg
-                                    className="w-8 h-8 text-white"
-                                    viewBox="0 0 76 76"
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    fill="currentColor"
-                                    >
-                                    <g>
-                                        <path d="M38,51.3c5,0,9-4,9-9V21.5c0-5-4-9-9-9s-9,4-9-9v20.8C29,47.3,33,51.3,38,51.3z M32,21.5c0-3.3,2.7-6,6-6s6,2.7,6,6v20.8   c0,3.3-2.7,6-6,6s-6-2.7-6-6V21.5z M50.4,42.3c0,6.6-5.4,12-12,12s-12-5.4-12-12h-3c0,7.8,6,14.2,13.5,14.9v7.1h3v-7.1   c7.5-0.7,13.5-7,13.5-14.9H50.4z" />
-                                    </g>
-                                </svg>
-                            </button>
-                        )}
+
+                        {/* Ícone da Câmara à Direita */}
+                        <button 
+                            onClick={() => alert("Funcionalidade de análise de imagem a ser implementada!")} 
+                            className="p-3 text-gray-400 hover:text-white"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                        </button>
                     </div>
                 </div>
             )}
