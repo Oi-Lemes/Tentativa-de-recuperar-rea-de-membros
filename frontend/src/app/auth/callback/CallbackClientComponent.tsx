@@ -3,13 +3,14 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
-export default function CallbackClientComponent() {
+export default function AuthCallbackClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [status, setStatus] = useState('A verificar o seu acesso...');
   const [error, setError] = useState('');
 
   useEffect(() => {
+    // Esta função só irá correr uma vez, no lado do cliente
     const token = searchParams.get('token');
 
     if (!token) {
@@ -30,9 +31,8 @@ export default function CallbackClientComponent() {
 
         if (response.ok) {
           setStatus(`Bem-vindo, ${data.userName}! A redirecionar...`);
-          localStorage.setItem('token', data.token); // Guarda o token JWT final
-          // Usamos replace para que o utilizador não possa voltar à página de callback com a seta "Voltar"
-          router.replace('/dashboard'); 
+          localStorage.setItem('token', data.token);
+          router.replace('/dashboard');
         } else {
           setError(data.message || 'Ocorreu um erro na verificação.');
           setStatus('Falha na autenticação');
@@ -46,7 +46,6 @@ export default function CallbackClientComponent() {
     verifyToken();
   }, [searchParams, router]);
 
-  // Interface de Loading/Erro que o utilizador vê enquanto o token é verificado
   return (
     <div className="text-center">
       <h1 className="text-3xl font-bold">{status}</h1>

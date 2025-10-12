@@ -1,8 +1,9 @@
 import { Suspense } from 'react';
-import CallbackClientComponent from './CallbackClientComponent';
+import AuthCallbackClient from './AuthCallbackClient';
 
-// Componente de Fallback que mostra a mensagem "A carregar..."
-function LoadingFallback() {
+// Este é o componente que o Next.js vai mostrar enquanto espera
+// que a parte do cliente (que lê a URL) carregue.
+function LoadingSpinner() {
     return (
         <div className="text-center">
             <h1 className="text-3xl font-bold">A carregar...</h1>
@@ -16,8 +17,8 @@ function LoadingFallback() {
 export default function AuthCallbackPage() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-gray-900 text-white">
-      <Suspense fallback={<LoadingFallback />}>
-        <CallbackClientComponent />
+      <Suspense fallback={<LoadingSpinner />}>
+        <AuthCallbackClient />
       </Suspense>
     </main>
   );
