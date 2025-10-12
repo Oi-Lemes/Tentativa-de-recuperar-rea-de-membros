@@ -13,7 +13,7 @@ datasource db {
 model User {
   id        Int      @id @default(autoincrement())
   email     String   @unique
-  nome      String
+  nome      String? // O campo 'nome' agora é opcional para não dar erro
   createdAt DateTime @default(now())
   progresso ProgressoAula[]
 
