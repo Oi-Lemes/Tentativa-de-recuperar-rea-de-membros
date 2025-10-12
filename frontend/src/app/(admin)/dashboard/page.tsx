@@ -15,7 +15,7 @@ interface Modulo {
   aulas: Aula[];
 }
 
-// Componente para o Círculo de Progresso (sem alterações)
+// Componente para o Círculo de Progresso
 const ProgressCircle = ({ percentage }: { percentage: number }) => {
   const strokeWidth = 8;
   const radius = 35;
@@ -104,14 +104,16 @@ export default function DashboardPage() {
           const progressoAnterior = index > 0 ? getProgressoModulo(modulos[index - 1]) : 100;
           const isLocked = index > 0 && progressoAnterior < 100;
           
-          // --- ALTERAÇÃO AQUI ---
-          // Usando a imagem de fundo existente como placeholder para todos os módulos
+          const destinationUrl = modulo.title === 'Emissão de Certificado'
+            ? '/certificado'
+            : `/modulo/${modulo.id}`;
+          
           const imageUrl = '/img/fundo.png';
 
           return (
             <Link
               key={modulo.id}
-              href={isLocked ? '#' : `/modulo/${modulo.id}`}
+              href={isLocked ? '#' : destinationUrl}
               className={`
                 group relative block rounded-lg overflow-hidden transition-all duration-300 transform
                 ${isLocked
@@ -128,16 +130,19 @@ export default function DashboardPage() {
                   objectFit="cover"
                   className="transition-transform duration-500 group-hover:scale-110"
                 />
-                {/* Overlay gradiente */}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent"></div>
               </div>
 
               <div className="absolute bottom-0 left-0 p-6 text-white w-full">
                 <h3 className="text-2xl font-bold uppercase tracking-wider">{modulo.title}</h3>
-                <p className="text-gray-300 text-sm">{modulo.description}</p>
+                {modulo.title === 'Emissão de Certificado' ? (
+                    <p className="text-amber-300 text-sm">🏆 {modulo.description}</p>
+                ) : (
+                    <p className="text-gray-300 text-sm">{modulo.description}</p>
+                )}
               </div>
 
-              {!isLocked && <ProgressCircle percentage={progresso} />}
+              {!isLocked && modulo.aulas.length > 0 && <ProgressCircle percentage={progresso} />}
 
               {isLocked && (
                 <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center p-4 text-center">

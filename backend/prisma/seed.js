@@ -10,7 +10,7 @@ async function main() {
   await prisma.modulo.deleteMany({});
   console.log('Dados antigos de módulos e aulas deletados.');
 
-  // Criar 6 Módulos
+  // Criar 6 Módulos de conteúdo
   for (let i = 1; i <= 6; i++) {
     const modulo = await prisma.modulo.create({
       data: {
@@ -27,6 +27,17 @@ async function main() {
     });
     console.log(`Módulo ${i} e suas 3 aulas foram criados com sucesso.`);
   }
+
+  // Adiciona o novo módulo de certificado
+  await prisma.modulo.create({
+    data: {
+      title: 'Emissão de Certificado',
+      description: 'Parabéns! Emita seu certificado de conclusão.',
+      // Este módulo não tem aulas
+    },
+  });
+  console.log('Módulo de Emissão de Certificado criado com sucesso.');
+
 
   console.log('Seeding concluído com sucesso!');
 }

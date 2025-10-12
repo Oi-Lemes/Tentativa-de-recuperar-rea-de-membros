@@ -3,15 +3,18 @@ require('dotenv').config();
 // 1. Importações
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
-const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const http = require('http');
 const { WebSocketServer } = require('ws');
 const OpenAI = require('openai');
 const { Readable } = require('stream');
+const { spawn } = require('child_process');
+const crypto = require('crypto'); // Módulo para gerar tokens seguros
 
-// --- Middleware de Autenticação ---
+// --- Middlewares ---
+
+// Middleware para utilizadores autenticados com JWT
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -24,87 +27,146 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
+// Middleware para verificar o token dos webhooks do gateway
+const verifyGatewayToken = (req, res, next) => {
+  const receivedToken = req.headers['authorization'];
+  const expectedToken = `Bearer ${process.env.GATEWAY_WEBHOOK_SECRET}`;
+
+  if (!receivedToken || receivedToken !== expectedToken) {
+    console.warn('AVISO: Tentativa de acesso não autorizado ao webhook.');
+    return res.status(401).json({ message: 'Acesso não autorizado.' });
+  }
+  next();
+};
+
+// --- FUNÇÃO DE ENVIO DE EMAIL (SIMULADA) ---
+// No futuro, você substituirá isto pela integração real com o Resend ou outro serviço
+async function sendMagicLinkEmail(email, link) {
+  console.log("-----------------------------------------");
+  console.log(`EMAIL SIMULADO ENVIADO PARA: ${email}`);
+  console.log(`Seu link mágico de login é: ${link}`);
+  console.log("Em produção, este link seria enviado para o email do utilizador.");
+  console.log("-----------------------------------------");
+  // Exemplo com Resend (requer 'npm install resend'):
+  // const { Resend } = require('resend');
+  // const resend = new Resend(process.env.RESEND_API_KEY);
+  // await resend.emails.send({
+  //   from: 'seuemail@seudominio.com',
+  //   to: email,
+  //   subject: 'Seu Link de Acesso à Área de Membros',
+  //   html: `<p>Olá! Clique no link a seguir para fazer login: <a href="${link}">Aceder à área de membros</a>. Este link expira em 15 minutos.</p>`
+  // });
+}
+
+
 async function main() {
   try {
     const app = express();
     app.use(cors());
     app.use(express.json());
     const prisma = new PrismaClient();
-    const PORT = 3001;
+    const PORT = process.env.PORT || 3001;
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-    // --- Rotas HTTP (sem alterações) ---
-    // ROTA DE CADASTRO
-    app.post('/usuarios', async (req, res) => {
-      console.log('--- INICIANDO CADASTRO ---');
-      try {
-        const { email, password } = req.body;
-        if (!password) {
-            return res.status(400).json({ message: "O campo 'password' é obrigatório." });
-        }
-        const salt = await bcrypt.genSalt(10);
-        const senhaHash = await bcrypt.hash(password, salt);
-        const novoUsuario = await prisma.user.create({
-          data: { email: email, senha: senhaHash },
-        });
-        const usuarioSemSenha = { ...novoUsuario };
-        delete usuarioSemSenha.senha;
-        res.status(201).json(usuarioSemSenha);
-      } catch (error) {
-        console.error("ERRO GRAVE NO CADASTRO:", error);
-        res.status(400).json({ message: "Não foi possível criar o usuário. O e-mail já pode existir." });
+    // --- ROTAS DE AUTENTICAÇÃO COM LINK MÁGICO ---
+
+    // ROTA 1: Utilizador pede o link mágico
+    app.post('/auth/magic-link', async (req, res) => {
+      const { email } = req.body;
+      if (!email) {
+        return res.status(400).json({ message: "O email é obrigatório." });
       }
+
+      const user = await prisma.user.findUnique({ where: { email } });
+
+      if (!user) {
+        return res.status(404).json({ message: "Nenhuma conta encontrada com este email. Verifique o email que usou na compra." });
+      }
+
+      const token = crypto.randomBytes(32).toString('hex');
+      const tokenExpires = new Date(Date.now() + 15 * 60 * 1000); // Token expira em 15 minutos
+
+      await prisma.user.update({
+        where: { email },
+        data: {
+          magicLinkToken: token,
+          magicLinkTokenExpires: tokenExpires,
+        },
+      });
+
+      const magicLink = `${process.env.FRONTEND_URL}/auth/callback?token=${token}`;
+      await sendMagicLinkEmail(email, magicLink);
+
+      res.status(200).json({ message: "Link mágico enviado! Verifique a sua caixa de entrada." });
     });
 
-    // ROTA DE LOGIN
-    app.post('/login', async (req, res) => {
-      console.log('--- INICIANDO LOGIN ---');
-      try {
-        const { email, password } = req.body;
-        const usuario = await prisma.user.findUnique({ where: { email: email } });
-        if (!usuario) {
-          return res.status(404).json({ message: "Usuário não encontrado." });
-        }
-        if (!usuario.senha || !usuario.senha.startsWith('$2b$')) {
-            console.error(`O usuário '${email}' tentou logar, mas sua senha no banco de dados NÃO está criptografada.`);
-            return res.status(500).json({ message: "Erro crítico de segurança: a senha deste usuário não está criptografada." });
-        }
-        const senhaCorreta = await bcrypt.compare(password, usuario.senha);
-        if (!senhaCorreta) {
-          return res.status(401).json({ message: "Senha incorreta." });
-        }
-        const token = jwt.sign(
-          { id: usuario.id, email: usuario.email },
-          process.env.JWT_SECRET,
-          { expiresIn: '1h' }
-        );
-        res.status(200).json({ token: token });
-      } catch (error) {
-        console.error("ERRO GRAVE NO LOGIN:", error);
-        res.status(500).json({ message: "Ocorreu um erro inesperado no login." });
+    // ROTA 2: Utilizador clica no link e o frontend verifica o token
+    app.post('/auth/verify', async (req, res) => {
+      const { token } = req.body;
+      if (!token) {
+        return res.status(400).json({ message: "Token não fornecido." });
       }
+
+      const user = await prisma.user.findUnique({
+        where: { magicLinkToken: token },
+      });
+
+      if (!user || !user.magicLinkTokenExpires || user.magicLinkTokenExpires < new Date()) {
+        return res.status(400).json({ message: "Link inválido ou expirado. Por favor, peça um novo." });
+      }
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          magicLinkToken: null,
+          magicLinkTokenExpires: null,
+        },
+      });
+
+      const jwtToken = jwt.sign(
+        { id: user.id, email: user.email },
+        process.env.JWT_SECRET,
+        { expiresIn: '1h' }
+      );
+
+      res.status(200).json({ token: jwtToken, userName: user.nome });
     });
 
-    // ROTAS DE CONTEÚDO (PROTEGIDAS)
+    // --- ROTAS DE CONTEÚDO (Protegidas) ---
+    
     app.get('/modulos', authenticateToken, async (req, res) => {
-        const modulos = await prisma.modulo.findMany({
+        const userId = req.user.id;
+        const todosModulos = await prisma.modulo.findMany({
             include: { aulas: { select: { id: true } } },
+            orderBy: { id: 'asc' },
         });
-        res.json(modulos);
+        const modulosDeConteudo = todosModulos.filter(m => m.title !== 'Emissão de Certificado');
+        const moduloCertificado = todosModulos.find(m => m.title === 'Emissão de Certificado');
+        const progresso = await prisma.progressoAula.findMany({
+            where: { userId: userId },
+            select: { aulaId: true },
+        });
+        const aulasConcluidasIds = progresso.map(p => p.aulaId);
+        const totalAulasDeConteudo = modulosDeConteudo.reduce((acc, modulo) => acc + modulo.aulas.length, 0);
+        const cursoConcluido = totalAulasDeConteudo > 0 && aulasConcluidasIds.length >= totalAulasDeConteudo;
+        let modulosParaEnviar = [...modulosDeConteudo];
+        if (cursoConcluido && moduloCertificado) {
+            modulosParaEnviar.push(moduloCertificado);
+        }
+        res.json(modulosParaEnviar);
     });
+
     app.get('/modulos/:id', authenticateToken, async (req, res) => {
         const { id } = req.params;
         const modulo = await prisma.modulo.findUnique({
             where: { id: parseInt(id) },
             include: { aulas: true },
         });
-        if (!modulo) {
-            return res.status(404).json({ message: 'Módulo não encontrado' });
-        }
+        if (!modulo) { return res.status(404).json({ message: 'Módulo não encontrado' }); }
         res.json(modulo);
     });
     
-    // ROTAS DE PROGRESSO (PROTEGIDAS)
+    // ROTAS DE PROGRESSO (Protegidas)
     app.get('/progresso', authenticateToken, async (req, res) => {
         const progresso = await prisma.progressoAula.findMany({
             where: { userId: req.user.id },
@@ -112,6 +174,7 @@ async function main() {
         });
         res.json(progresso.map(p => p.aulaId));
     });
+
     app.post('/progresso/aula/:aulaId', authenticateToken, async (req, res) => {
         const { aulaId } = req.params;
         const userId = req.user.id;
@@ -120,14 +183,10 @@ async function main() {
                 where: { userId_aulaId: { userId, aulaId: parseInt(aulaId) } },
             });
             if (jaConcluida) {
-                await prisma.progressoAula.delete({
-                    where: { userId_aulaId: { userId, aulaId: parseInt(aulaId) } },
-                });
+                await prisma.progressoAula.delete({ where: { userId_aulaId: { userId, aulaId: parseInt(aulaId) } } });
                 res.json({ message: 'Aula desmarcada como concluída.' });
             } else {
-                await prisma.progressoAula.create({
-                    data: { userId: userId, aulaId: parseInt(aulaId) },
-                });
+                await prisma.progressoAula.create({ data: { userId: userId, aulaId: parseInt(aulaId) } });
                 res.json({ message: 'Aula marcada como concluída.' });
             }
         } catch (error) {
@@ -135,151 +194,114 @@ async function main() {
             res.status(500).json({ message: 'Erro ao atualizar progresso.' });
         }
     });
-    
-    // LÓGICA DOS WEBHOOKS
-    app.post('/webhooks/compra-aprovada', async (req, res) => {
-      const { email } = req.body;
-      if (!email) {
-        return res.status(400).json({ message: 'Email é obrigatório.' });
-      }
-      try {
-        const senhaAleatoria = Math.random().toString(36).slice(-8);
-        const salt = await bcrypt.genSalt(10);
-        const senhaHash = await bcrypt.hash(senhaAleatoria, salt);
-        await prisma.user.create({
-          data: { email: email, senha: senhaHash },
-        });
-        console.log(`Usuário criado via webhook: ${email} com senha temporária: ${senhaAleatoria}`);
-        res.status(201).json({ message: 'Usuário criado com sucesso.' });
-      } catch (error) {
-        if (error.code === 'P2002') {
-          return res.status(200).json({ message: 'Usuário já existia.' });
+
+    // ROTA PARA GERAR O CERTIFICADO (Protegida)
+    app.post('/generate-certificate', authenticateToken, async (req, res) => {
+        try {
+            const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+            if (!user) { return res.status(404).json({ message: "Utilizador não encontrado." }); }
+
+            const student_name = user.nome || user.email;
+            const course_name = "Formação em Herborista";
+            const completion_date = new Date().toLocaleDateString('pt-BR');
+            const dataParaPython = { student_name, course_name, completion_date };
+            const jsonData = JSON.stringify(dataParaPython);
+            const base64Data = Buffer.from(jsonData).toString('base64');
+            const pythonProcess = spawn('python', ['gerador_certificado/script.py', base64Data]);
+            const pdfChunks = [];
+            pythonProcess.stdout.on('data', (chunk) => { pdfChunks.push(chunk); });
+            pythonProcess.stderr.on('data', (data) => { console.error(`Erro do script Python: ${data.toString()}`); });
+            pythonProcess.on('close', (code) => {
+                if (code === 0 && pdfChunks.length > 0) {
+                    const pdfBuffer = Buffer.concat(pdfChunks);
+                    res.setHeader('Content-Type', 'application/pdf');
+                    res.setHeader('Content-Disposition', `attachment; filename=certificado_${student_name.replace(/[^a-zA-Z0-9]/g, "_")}.pdf`);
+                    res.send(pdfBuffer);
+                } else {
+                    res.status(500).json({ message: "Ocorreu uma falha ao gerar o certificado." });
+                }
+            });
+        } catch (error) {
+            console.error("Erro ao tentar executar o script de certificado:", error);
+            res.status(500).json({ message: "Ocorreu um erro interno no servidor." });
         }
-        res.status(500).json({ message: 'Erro interno ao criar usuário.' });
+    });
+    
+    // --- LÓGICA DOS WEBHOOKS (SEGURA E ATUALIZADA) ---
+    app.post('/webhooks/compra-aprovada', verifyGatewayToken, async (req, res) => {
+      const { email, full_name } = req.body;
+      if (!email) { return res.status(400).json({ message: 'Email é obrigatório.' }); }
+      try {
+        const nomeDoAluno = full_name || email.split('@')[0];
+        await prisma.user.upsert({
+            where: { email: email },
+            update: { nome: nomeDoAluno },
+            create: { email: email, nome: nomeDoAluno },
+        });
+        console.log(`Usuário criado/atualizado via webhook: ${email}`);
+        res.status(201).json({ message: 'Usuário criado/atualizado com sucesso.' });
+      } catch (error) {
+        console.error("Erro no webhook de compra:", error);
+        res.status(500).json({ message: 'Erro interno ao criar/atualizar usuário.' });
       }
     });
-    app.post('/webhooks/reembolso', async (req, res) => {
+
+    app.post('/webhooks/reembolso', verifyGatewayToken, async (req, res) => {
       const { email } = req.body;
-      if (!email) {
-        return res.status(400).json({ message: 'Email é obrigatório.' });
-      }
+      if (!email) { return res.status(400).json({ message: 'Email é obrigatório.' }); }
       try {
         await prisma.user.delete({ where: { email: email } });
         console.log(`Usuário com email ${email} foi deletado.`);
         res.status(200).json({ message: 'Acesso do usuário removido com sucesso.' });
       } catch (error) {
-        if (error.code === 'P2025') {
-          return res.status(404).json({ message: 'Usuário não encontrado para remoção.' });
-        }
+        if (error.code === 'P2025') { return res.status(404).json({ message: 'Usuário não encontrado para remoção.' }); }
+        console.error("Erro no webhook de reembolso:", error);
         res.status(500).json({ message: 'Erro interno ao remover usuário.' });
       }
     });
 
-    // ROTA DE LIMPEZA
-    app.post('/delete-all-users', async (req, res) => {
-        try {
-            const deleted = await prisma.user.deleteMany({});
-            res.status(200).json({ message: `${deleted.count} usuários foram deletados com sucesso.` });
-        } catch (error) {
-            res.status(500).json({ message: "Não foi possível deletar os usuários." });
-        }
-    });
-
-
-    // --- LÓGICA WEBSOCKET ATUALIZADA COM DEBUG ---
+    // --- LÓGICA DO CHATBOT (WEBSOCKET) ---
     const server = http.createServer(app);
     const wss = new WebSocketServer({ server });
-
     wss.on('connection', (ws) => {
         console.log('✅ Cliente WebSocket conectado!');
         let audioBuffers = [];
-        let conversationHistory = [{
-            role: "system",
-            content: `Você é a "Nina", uma assistente de IA especialista em herbalismo...` // Seu prompt de sistema
-        }];
+        let conversationHistory = [{ role: "system", content: `Você é a "Nina", uma assistente de IA especialista em herbalismo...` }];
         
         const processAudio = async () => {
             if (audioBuffers.length === 0) return;
-            console.log('🗣️ Processando áudio...');
             const audioBuffer = Buffer.concat(audioBuffers);
             audioBuffers = [];
-
             try {
-                // Etapa 1: Transcrição (Audio-para-Texto)
-                console.log('1/4 - Enviando para transcrição (Whisper)...');
                 const audioStream = Readable.from(audioBuffer);
-                const transcription = await openai.audio.transcriptions.create({
-                    file: await OpenAI.toFile(audioStream, 'audio.webm'),
-                    model: 'whisper-1', language: 'pt'
-                });
-                
+                const transcription = await openai.audio.transcriptions.create({ file: await OpenAI.toFile(audioStream, 'audio.webm'), model: 'whisper-1', language: 'pt' });
                 const userText = transcription.text;
-                console.log(`2/4 - Texto transcrito: "${userText}"`);
                 if (!userText.trim()) return;
-
                 if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: 'user_transcript', text: userText }));
-                
                 conversationHistory.push({ role: "user", content: userText });
-
-                // Etapa 2: Chat (Obter resposta do GPT)
-                console.log('3/4 - Enviando para o GPT-3.5-Turbo...');
-                const completion = await openai.chat.completions.create({
-                    model: "gpt-3.5-turbo", messages: conversationHistory,
-                });
-                
+                const completion = await openai.chat.completions.create({ model: "gpt-3.5-turbo", messages: conversationHistory });
                 const gptResponseText = completion.choices[0].message.content;
                 conversationHistory.push({ role: "assistant", content: gptResponseText });
-
                 if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: 'assistant_response', text: gptResponseText }));
-
-                // Etapa 3: Síntese de Voz (Texto-para-Áudio)
-                console.log('4/4 - Gerando áudio de resposta (TTS)...');
-                const mp3 = await openai.audio.speech.create({
-                    model: "tts-1", voice: "nova", input: gptResponseText, response_format: "mp3",
-                });
-                
+                const mp3 = await openai.audio.speech.create({ model: "tts-1", voice: "nova", input: gptResponseText, response_format: "mp3" });
                 const audioResponseBuffer = Buffer.from(await mp3.arrayBuffer());
                 if (ws.readyState === ws.OPEN) ws.send(audioResponseBuffer);
-                console.log('✅ Pipeline concluído com sucesso!');
-
             } catch (error) {
-                console.error('❌ ERRO DETALHADO NO PIPELINE DE IA DA OPENAI:');
-                console.error(error);
+                console.error('❌ ERRO NO PIPELINE DE IA:', error);
                 if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: 'error', text: 'Desculpe, ocorreu um erro no servidor.' }));
             }
         };
 
         ws.on('message', (data) => {
-            // --- INÍCIO DO NOVO CÓDIGO DE DEBUG ---
-            console.log(`--- MENSAGEM RECEBIDA ---`);
-            console.log(`Tipo de dado: ${typeof data}`);
-            console.log(`É um Buffer? ${Buffer.isBuffer(data)}`);
-            if (Buffer.isBuffer(data)) {
-                console.log(`Tamanho do Buffer: ${data.length} bytes`);
-            } else {
-                console.log(`Conteúdo (se não for buffer): ${data.toString()}`);
-            }
-            // --- FIM DO NOVO CÓDIGO DE DEBUG ---
-
-            if (typeof data === 'string' && data === 'EOM') {
-                console.log("✅ Sinal 'EOM' recebido! A iniciar processamento de áudio...");
-                processAudio();
-            } 
-            else if (Buffer.isBuffer(data)) {
-                audioBuffers.push(data);
-                // console.log(`Chunk de áudio adicionado. Total de chunks: ${audioBuffers.length}`); // Log opcional
-            } else {
-                // Adicionado para capturar casos inesperados
-                console.warn("Aviso: Recebido um tipo de dado inesperado via WebSocket. Ignorando.", data);
-            }
+            if (typeof data === 'string' && data === 'EOM') { processAudio(); } 
+            else if (Buffer.isBuffer(data)) { audioBuffers.push(data); }
         });
-
         ws.on('close', () => console.log('❌ Cliente WebSocket desconectado.'));
         ws.on('error', (error) => console.error('WebSocket Error:', error));
     });
 
     server.listen(PORT, () => {
-        console.log(`✅ Servidor 100% OpenAI (HTTP e WebSocket) a rodar na porta ${PORT}`);
+        console.log(`✅ Servidor a rodar na porta ${PORT}`);
     });
 
   } catch (error) {

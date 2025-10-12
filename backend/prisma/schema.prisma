@@ -13,9 +13,13 @@ datasource db {
 model User {
   id        Int      @id @default(autoincrement())
   email     String   @unique
-  senha     String
+  nome      String
   createdAt DateTime @default(now())
   progresso ProgressoAula[]
+
+  // REMOVEMOS O CAMPO SENHA E ADICIONAMOS ESTES
+  magicLinkToken        String?   @unique // Token para o link mágico
+  magicLinkTokenExpires DateTime? // Data de expiração do token
 }
 
 model Modulo {
@@ -40,5 +44,5 @@ model ProgressoAula {
   aulaId      Int
   completedAt DateTime @default(now())
 
-  @@id([userId, aulaId]) // Chave primária composta
+  @@id([userId, aulaId])
 }
