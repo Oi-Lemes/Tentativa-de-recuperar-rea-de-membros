@@ -1,5 +1,5 @@
 import { Suspense } from 'react';
-import AuthCallbackClient from './AuthCallbackClient';
+import AuthCallbackClient from './CallbackClientComponent';
 
 // Este é o componente que o Next.js vai mostrar enquanto espera
 // que a parte do cliente (que lê a URL) carregue.
