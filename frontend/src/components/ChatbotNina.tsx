@@ -63,7 +63,6 @@ export default function ChatbotNina() {
         if (mediaRecorder.current && mediaRecorder.current.state === "recording") {
             mediaRecorder.current.stop();
         }
-        // O estado de 'isRecording' será atualizado para 'false' no onstop, para garantir que o EOM foi enviado
     }, []);
     
     // --- Função para Iniciar a Gravação ---
@@ -75,8 +74,17 @@ export default function ChatbotNina() {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             streamRef.current = stream;
+
+            // Transforma o URL http para wss
+            const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+            if (!backendUrl) {
+                console.error("URL do backend não está configurada!");
+                alert("A configuração do servidor não foi encontrada.");
+                return;
+            }
+            const wsUrl = backendUrl.replace(/^http/, 'ws');
             
-            ws.current = new WebSocket('ws://localhost:3001');
+            ws.current = new WebSocket(wsUrl);
             
             ws.current.onopen = () => {
                 const mimeType = getSupportedMimeType()!;
@@ -94,7 +102,7 @@ export default function ChatbotNina() {
                         ws.current.send("EOM");
                     }
                     streamRef.current?.getTracks().forEach(track => track.stop());
-                    setIsRecording(false); // Atualiza o estado aqui para garantir sincronia
+                    setIsRecording(false);
                 };
 
                 recorder.start(250);
@@ -139,7 +147,6 @@ export default function ChatbotNina() {
         }
     }, [isRecording]);
 
-    // --- NOVA LÓGICA: Clique único para alternar gravação ---
     const handleMicClick = () => {
         if (isRecording) {
             stopRecording();
@@ -189,9 +196,7 @@ export default function ChatbotNina() {
                         )}
                     </div>
                     
-                    {/* --- NOVO LAYOUT DO RODAPÉ --- */}
                     <div className="p-4 bg-gray-900 flex items-center justify-between rounded-b-lg">
-                        {/* Ícone do Microfone à Esquerda */}
                         <button 
                             onClick={handleMicClick}
                             className={`p-3 rounded-full transition-colors duration-200 ${
@@ -206,7 +211,6 @@ export default function ChatbotNina() {
                             </svg>
                         </button>
 
-                        {/* Ícone da Câmara à Direita */}
                         <button 
                             onClick={() => alert("Funcionalidade de análise de imagem a ser implementada!")} 
                             className="p-3 text-gray-400 hover:text-white"

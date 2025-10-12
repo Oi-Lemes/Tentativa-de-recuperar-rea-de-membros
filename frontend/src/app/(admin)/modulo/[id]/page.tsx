@@ -32,10 +32,10 @@ export default function ModuloPage() {
 
       try {
         const [moduloRes, progressoRes] = await Promise.all([
-          fetch(`http://localhost:3001/modulos/${id}`, {
+          fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/modulos/${id}`, {
             headers: { 'Authorization': `Bearer ${token}` }
           }),
-          fetch('http://localhost:3001/progresso', {
+          fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/progresso`, {
             headers: { 'Authorization': `Bearer ${token}` }
           })
         ]);

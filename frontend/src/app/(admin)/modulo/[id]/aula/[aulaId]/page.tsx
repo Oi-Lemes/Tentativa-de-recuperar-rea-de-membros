@@ -31,19 +31,12 @@ export default function AulaPage() {
   const isConcluida = aulaAtual ? aulasConcluidas.includes(aulaAtual.id) : false;
 
   // --- LÓGICA DE REDIRECIONAMENTO AUTOMÁTICO ---
-  // Este useEffect observa mudanças no estado 'isConcluida'.
   useEffect(() => {
-    // Se a aula atual é a última do módulo E ela acabou de ser marcada como concluída...
     if (isUltimaAulaDoModulo && isConcluida) {
       console.log('Última aula do módulo concluída! Redirecionando em 3 segundos...');
-      
-      // Criamos um timer de 3 segundos (3000 milissegundos)
       const timer = setTimeout(() => {
-        // Após 3 segundos, redireciona para o dashboard
         router.push('/dashboard');
       }, 3000);
-
-      // Limpa o timer se o usuário sair da página antes do tempo
       return () => clearTimeout(timer);
     }
   }, [isConcluida, isUltimaAulaDoModulo, router]);
@@ -56,10 +49,10 @@ export default function AulaPage() {
         
         try {
             const [moduloRes, progressoRes] = await Promise.all([
-                fetch(`http://localhost:3001/modulos/${moduleId}`, {
+                fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/modulos/${moduleId}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 }),
-                fetch('http://localhost:3001/progresso', {
+                fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/progresso`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 })
             ]);
@@ -82,7 +75,7 @@ export default function AulaPage() {
     if(!token || !aulaAtual) return;
 
     try {
-        await fetch(`http://localhost:3001/progresso/aula/${aulaAtual.id}`, {
+        await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/progresso/aula/${aulaAtual.id}`, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${token}` },
         });

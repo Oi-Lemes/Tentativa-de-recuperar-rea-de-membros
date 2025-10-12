@@ -62,10 +62,10 @@ export default function AdminLayout({
 
     try {
         const [modulosRes, progressoRes] = await Promise.all([
-            fetch('http://localhost:3001/modulos', {
+            fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/modulos`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             }),
-            fetch('http://localhost:3001/progresso', {
+            fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/progresso`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             })
         ]);
