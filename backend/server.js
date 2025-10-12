@@ -4,17 +4,24 @@ require('dotenv').config();
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const jwt = require('jsonwebtoken');
-const cors = require('cors');
+const cors = require('cors'); // Importação do CORS
 const http = require('http');
 const { WebSocketServer } = require('ws');
 const OpenAI = require('openai');
 const { Readable } = require('stream');
 const { spawn } = require('child_process');
-const crypto = require('crypto'); // Módulo para gerar tokens seguros
+const crypto = require('crypto');
+
+// --- Configuração do CORS ---
+// Esta é a alteração mais importante.
+// Adicionamos o URL do seu frontend (da Vercel) à lista de permissões.
+const corsOptions = {
+  origin: process.env.FRONTEND_URL, // Permite apenas que o seu frontend faça pedidos
+  optionsSuccessStatus: 200 // Para browsers mais antigos
+};
+
 
 // --- Middlewares ---
-
-// Middleware para utilizadores autenticados com JWT
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -27,7 +34,6 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
-// Middleware para verificar o token dos webhooks do gateway
 const verifyGatewayToken = (req, res, next) => {
   const receivedToken = req.headers['authorization'];
   const expectedToken = `Bearer ${process.env.GATEWAY_WEBHOOK_SECRET}`;
@@ -39,38 +45,28 @@ const verifyGatewayToken = (req, res, next) => {
   next();
 };
 
-// --- FUNÇÃO DE ENVIO DE EMAIL (SIMULADA) ---
-// No futuro, você substituirá isto pela integração real com o Resend ou outro serviço
 async function sendMagicLinkEmail(email, link) {
   console.log("-----------------------------------------");
   console.log(`EMAIL SIMULADO ENVIADO PARA: ${email}`);
   console.log(`Seu link mágico de login é: ${link}`);
   console.log("Em produção, este link seria enviado para o email do utilizador.");
   console.log("-----------------------------------------");
-  // Exemplo com Resend (requer 'npm install resend'):
-  // const { Resend } = require('resend');
-  // const resend = new Resend(process.env.RESEND_API_KEY);
-  // await resend.emails.send({
-  //   from: 'seuemail@seudominio.com',
-  //   to: email,
-  //   subject: 'Seu Link de Acesso à Área de Membros',
-  //   html: `<p>Olá! Clique no link a seguir para fazer login: <a href="${link}">Aceder à área de membros</a>. Este link expira em 15 minutos.</p>`
-  // });
 }
 
 
 async function main() {
   try {
     const app = express();
-    app.use(cors());
+    
+    // APLICAR A NOVA CONFIGURAÇÃO DO CORS
+    app.use(cors(corsOptions)); 
+    
     app.use(express.json());
     const prisma = new PrismaClient();
     const PORT = process.env.PORT || 3001;
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
     // --- ROTAS DE AUTENTICAÇÃO COM LINK MÁGICO ---
-
-    // ROTA 1: Utilizador pede o link mágico
     app.post('/auth/magic-link', async (req, res) => {
       const { email } = req.body;
       if (!email) {
@@ -100,7 +96,6 @@ async function main() {
       res.status(200).json({ message: "Link mágico enviado! Verifique a sua caixa de entrada." });
     });
 
-    // ROTA 2: Utilizador clica no link e o frontend verifica o token
     app.post('/auth/verify', async (req, res) => {
       const { token } = req.body;
       if (!token) {
@@ -133,7 +128,6 @@ async function main() {
     });
 
     // --- ROTAS DE CONTEÚDO (Protegidas) ---
-    
     app.get('/modulos', authenticateToken, async (req, res) => {
         const userId = req.user.id;
         const todosModulos = await prisma.modulo.findMany({
@@ -166,7 +160,6 @@ async function main() {
         res.json(modulo);
     });
     
-    // ROTAS DE PROGRESSO (Protegidas)
     app.get('/progresso', authenticateToken, async (req, res) => {
         const progresso = await prisma.progressoAula.findMany({
             where: { userId: req.user.id },
@@ -195,7 +188,6 @@ async function main() {
         }
     });
 
-    // ROTA PARA GERAR O CERTIFICADO (Protegida)
     app.post('/generate-certificate', authenticateToken, async (req, res) => {
         try {
             const user = await prisma.user.findUnique({ where: { id: req.user.id } });
@@ -227,7 +219,6 @@ async function main() {
         }
     });
     
-    // --- LÓGICA DOS WEBHOOKS (SEGURA E ATUALIZADA) ---
     app.post('/webhooks/compra-aprovada', verifyGatewayToken, async (req, res) => {
       const { email, full_name } = req.body;
       if (!email) { return res.status(400).json({ message: 'Email é obrigatório.' }); }
@@ -260,7 +251,6 @@ async function main() {
       }
     });
 
-    // --- LÓGICA DO CHATBOT (WEBSOCKET) ---
     const server = http.createServer(app);
     const wss = new WebSocketServer({ server });
     wss.on('connection', (ws) => {
