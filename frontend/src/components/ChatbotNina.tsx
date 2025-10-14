@@ -34,14 +34,12 @@ export default function ChatbotNina() {
     const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
     const chatContainerRef = useRef<HTMLDivElement | null>(null);
     
-    // Efeito para rolar o chat para baixo quando novas mensagens aparecem
     useEffect(() => {
         if (chatContainerRef.current) {
             chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
         }
     }, [messages, isSpeaking]);
 
-    // --- Função de Desconexão e Limpeza ---
     const disconnect = useCallback(() => {
         if (mediaRecorder.current && mediaRecorder.current.state === "recording") {
             mediaRecorder.current.stop();
@@ -58,14 +56,12 @@ export default function ChatbotNina() {
         setIsRecording(false);
     }, []);
 
-    // --- Função para Parar a Gravação ---
     const stopRecording = useCallback(() => {
         if (mediaRecorder.current && mediaRecorder.current.state === "recording") {
             mediaRecorder.current.stop();
         }
     }, []);
     
-    // --- Função para Iniciar a Gravação ---
     const startRecording = useCallback(async () => {
         if (isRecording || !getSupportedMimeType()) return;
 
@@ -75,7 +71,6 @@ export default function ChatbotNina() {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             streamRef.current = stream;
 
-            // Transforma o URL http para wss
             const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
             if (!backendUrl) {
                 console.error("URL do backend não está configurada!");
@@ -158,7 +153,12 @@ export default function ChatbotNina() {
     return (
         <>
             <audio ref={audioPlayerRef} className="hidden" onEnded={() => setIsSpeaking(false)} />
-            <button onClick={() => setIsOpen(prev => !prev)} className="fixed bottom-4 right-4 bg-blue-600 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-lg hover:bg-blue-700 transition-transform hover:scale-110 z-50 text-2xl">
+            {/* --- BOTÃO DA NINA COM A COR ALTERADA --- */}
+            <button 
+                onClick={() => setIsOpen(prev => !prev)} 
+                className="fixed bottom-4 right-4 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-transform hover:scale-110 z-50 text-2xl"
+                style={{ backgroundColor: '#a45785' }} // Cor aplicada diretamente
+            >
                 🌿
             </button>
 

@@ -31,11 +31,12 @@ export default function ModuloPage() {
       if (!token) return;
 
       try {
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
         const [moduloRes, progressoRes] = await Promise.all([
-          fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/modulos/${id}`, {
+          fetch(`${backendUrl}/modulos/${id}`, {
             headers: { 'Authorization': `Bearer ${token}` }
           }),
-          fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/progresso`, {
+          fetch(`${backendUrl}/progresso`, {
             headers: { 'Authorization': `Bearer ${token}` }
           })
         ]);
@@ -65,6 +66,16 @@ export default function ModuloPage() {
 
   return (
     <div>
+      {/* --- BOTÃO DE VOLTAR ADICIONADO AQUI --- */}
+      <nav className="mb-8">
+        <Link href="/dashboard" className="text-blue-400 hover:underline flex items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+          </svg>
+          Voltar para todos os módulos
+        </Link>
+      </nav>
+
       <header className="mb-8">
         <h1 className="text-4xl font-bold mb-2">{modulo.title}</h1>
         <p className="text-lg text-gray-400">{modulo.description}</p>

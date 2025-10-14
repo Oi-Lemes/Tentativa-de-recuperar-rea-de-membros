@@ -1,15 +1,14 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+// Importa apenas a fonte correta do Google Fonts
+import { Great_Vibes } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+// Configura a fonte Great Vibes para ser usada no projeto
+const greatVibes = Great_Vibes({
+  variable: "--font-great-vibes",
+  weight: "400",
   subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+  display: 'swap', // Melhora a performance de carregamento da fonte
 });
 
 export const metadata: Metadata = {
@@ -25,7 +24,8 @@ export default function RootLayout({
   return (
     <html lang="pt-br">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        // Adiciona a variável da fonte Great Vibes e uma classe para garantir a aparência
+        className={`${greatVibes.variable} antialiased`}
       >
         {children}
       </body>

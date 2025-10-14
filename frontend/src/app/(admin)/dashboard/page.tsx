@@ -63,11 +63,12 @@ export default function DashboardPage() {
       if (!token) return;
 
       try {
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
         const [modulosRes, progressoRes] = await Promise.all([
-          fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/modulos`, {
+          fetch(`${backendUrl}/modulos`, {
             headers: { 'Authorization': `Bearer ${token}` }
           }),
-          fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/progresso`, {
+          fetch(`${backendUrl}/progresso`, {
             headers: { 'Authorization': `Bearer ${token}` }
           })
         ]);
@@ -95,9 +96,21 @@ export default function DashboardPage() {
 
   return (
     <section>
-      <h2 className="text-4xl font-bold mb-8 text-center text-white" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.7)' }}>
-        Área de Membros
-      </h2>
+      {/* --- TÍTULO COM O EFEITO DE ESCRITA CONTÍNUA --- */}
+      <div className="text-center mb-12">
+        <svg viewBox="0 0 800 100" className="w-full max-w-3xl mx-auto">
+          <defs>
+            <linearGradient id="titleGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="60%" stopColor="#FFFFFF" />
+              <stop offset="100%" stopColor="#A0A0A0" />
+            </linearGradient>
+          </defs>
+          <text className="handwriting-title" x="50%" y="50%" dy=".35em" textAnchor="middle">
+            Área de Membros
+          </text>
+        </svg>
+      </div>
+      
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {modulos.map((modulo, index) => {
           const progresso = getProgressoModulo(modulo);

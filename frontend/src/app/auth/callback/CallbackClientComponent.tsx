@@ -10,7 +10,6 @@ export default function AuthCallbackClient() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    // Esta função só irá correr uma vez, no lado do cliente
     const token = searchParams.get('token');
 
     if (!token) {
@@ -30,8 +29,10 @@ export default function AuthCallbackClient() {
         const data = await response.json();
 
         if (response.ok) {
-          setStatus(`Bem-vindo, ${data.userName}! A redirecionar...`);
+          setStatus(`Bem-vindo, ${data.userName || 'utilizador'}! A redirecionar...`);
+          // Guarda o token E o nome do utilizador
           localStorage.setItem('token', data.token);
+          localStorage.setItem('userName', data.userName); // <-- LINHA ADICIONADA
           router.replace('/dashboard');
         } else {
           setError(data.message || 'Ocorreu um erro na verificação.');

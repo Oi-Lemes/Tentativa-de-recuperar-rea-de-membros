@@ -12,145 +12,132 @@ interface Aula {
 interface Modulo {
   id: number;
   title: string;
+  description: string;
   aulas: Aula[];
 }
 
-export default function AulaPage() {
+export default function ModuloPage() {
   const params = useParams();
+  const { id } = params;
   const router = useRouter();
-  const { id: moduleId, aulaId } = params;
 
-  // Estado local para dados da API
   const [modulo, setModulo] = useState<Modulo | null>(null);
   const [aulasConcluidas, setAulasConcluidas] = useState<number[]>([]);
-
-  // Derivação de estado
-  const aulaAtual = modulo?.aulas.find(a => a.id.toString() === aulaId);
-  const aulaIndex = modulo?.aulas.findIndex(a => a.id.toString() === aulaId);
-  const isUltimaAulaDoModulo = aulaIndex !== undefined && modulo ? aulaIndex === modulo.aulas.length - 1 : false;
-  const isConcluida = aulaAtual ? aulasConcluidas.includes(aulaAtual.id) : false;
-
-  // --- LÓGICA DE REDIRECIONAMENTO AUTOMÁTICO ---
-  useEffect(() => {
-    if (isUltimaAulaDoModulo && isConcluida) {
-      console.log('Última aula do módulo concluída! Redirecionando em 3 segundos...');
-      const timer = setTimeout(() => {
-        router.push('/dashboard');
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [isConcluida, isUltimaAulaDoModulo, router]);
-
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!id) return;
+    
     const fetchData = async () => {
-        const token = localStorage.getItem('token');
-        if (!token || !moduleId) return;
-        
-        try {
-            const [moduloRes, progressoRes] = await Promise.all([
-                fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/modulos/${moduleId}`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                }),
-                fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/progresso`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                })
-            ]);
-            setModulo(await moduloRes.json());
-            setAulasConcluidas(await progressoRes.json());
-        } catch (error) {
-            console.error("Erro ao buscar dados da aula:", error);
+      setIsLoading(true);
+      setError(null);
+      const token = localStorage.getItem('token');
+      if (!token) {
+        router.push('/');
+        return;
+      };
+
+      try {
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+        const [moduloRes, progressoRes] = await Promise.all([
+          fetch(`${backendUrl}/modulos/${id}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          }),
+          fetch(`${backendUrl}/progresso`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          })
+        ]);
+
+        if (!moduloRes.ok) {
+          const errorData = await moduloRes.json();
+          throw new Error(errorData.message || "Módulo não encontrado");
         }
+
+        const moduloData = await moduloRes.json();
+        // Garante que 'aulas' seja sempre um array
+        if (!moduloData.aulas) {
+          moduloData.aulas = [];
+        }
+
+        setModulo(moduloData);
+        setAulasConcluidas(await progressoRes.json());
+
+      } catch (err: any) {
+        console.error("Erro ao buscar dados do módulo:", err);
+        setError(err.message);
+      } finally {
+        setIsLoading(false);
+      }
     };
     fetchData();
-  }, [moduleId]);
-
-
-  if (!modulo || !aulaAtual || aulaIndex === undefined) {
-    return <div>Aula não encontrada.</div>;
+  }, [id, router]);
+  
+  if (isLoading) {
+    return <div className="text-center text-white">A carregar...</div>
   }
 
-  const handleMarcarComoConcluida = async () => {
-    const token = localStorage.getItem('token');
-    if(!token || !aulaAtual) return;
-
-    try {
-        await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/progresso/aula/${aulaAtual.id}`, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${token}` },
-        });
-
-        let progressoAtualizado;
-        if (isConcluida) {
-            progressoAtualizado = aulasConcluidas.filter(id => id !== aulaAtual.id);
-        } else {
-            progressoAtualizado = [...aulasConcluidas, aulaAtual.id];
-        }
-        setAulasConcluidas(progressoAtualizado);
-
-        window.dispatchEvent(new Event('storage'));
-
-    } catch (error) {
-        console.error("Erro ao marcar aula como concluída:", error);
-    }
-  };
-
-  const handleProximo = () => {
-    if (!isUltimaAulaDoModulo && modulo) {
-        const proximaAula = modulo.aulas[aulaIndex + 1];
-        router.push(`/modulo/${moduleId}/aula/${proximaAula.id}`);
-    } 
-    else {
-        router.push('/dashboard');
-    }
-  };
+  if (error || !modulo) {
+    return (
+        <div className="text-center text-white">
+            <h1 className="text-3xl font-bold text-red-400">Ocorreu um Erro</h1>
+            <p className="mt-2">{error || "Não foi possível carregar o módulo."}</p>
+            <Link href="/dashboard" className="text-blue-400 hover:underline mt-4 block">
+              Voltar para o Dashboard
+            </Link>
+        </div>
+    );
+  }
 
   return (
     <div>
-      <nav className="mb-6">
-        <Link href={`/modulo/${moduleId}`} className="text-blue-400 hover:underline">
-          &larr; Voltar para as aulas do {modulo.title}
+      <nav className="mb-8">
+        <Link href="/dashboard" className="text-blue-400 hover:underline flex items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+          </svg>
+          Voltar para todos os módulos
         </Link>
       </nav>
 
-      <header className="mb-6">
-        <h1 className="text-4xl font-bold">{aulaAtual.title}</h1>
+      <header className="mb-8">
+        <h1 className="text-4xl font-bold mb-2">{modulo.title}</h1>
+        <p className="text-lg text-gray-400">{modulo.description}</p>
       </header>
-      
-      <main className="space-y-6">
-        <div className="aspect-w-16 aspect-h-9 bg-gray-800 rounded-lg overflow-hidden">
-          <div className="flex items-center justify-center h-full">
-            <p className="text-gray-400">[Vídeo da Aula]</p>
-          </div>
-        </div>
-
-        {isUltimaAulaDoModulo && isConcluida && (
-            <div className="bg-green-900/50 border border-green-700 text-green-300 px-4 py-3 rounded-lg text-center animate-pulse">
-                <h3 className="font-bold text-lg">Parabéns!</h3>
-                <p>Você concluiu o {modulo.title}. Redirecionando para o dashboard...</p>
+      <main>
+        {modulo.aulas.length > 0 ? (
+          <>
+            <h2 className="text-2xl font-semibold mb-4">Aulas do Módulo</h2>
+            <div className="flex flex-col space-y-4">
+                {modulo.aulas.map((aula, index) => {
+                  const isConcluida = aulasConcluidas.includes(aula.id);
+                  return (
+                    <Link 
+                      key={aula.id} 
+                      href={`/modulo/${modulo.id}/aula/${aula.id}`}
+                      className="bg-gray-800 p-4 rounded-lg flex items-center justify-between hover:bg-gray-700 transition-colors"
+                    >
+                        <div className="flex items-center">
+                            <span className={`text-lg mr-4 font-bold ${isConcluida ? 'text-green-500' : 'text-gray-500'}`}>
+                              {isConcluida ? '✓' : index + 1}
+                            </span>
+                            <h3 className={`text-lg ${isConcluida ? 'text-gray-400 line-through' : 'text-white'}`}>
+                              {aula.title}
+                            </h3>
+                        </div>
+                        <span className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-bold">
+                            Assistir
+                        </span>
+                    </Link>
+                  );
+                })}
             </div>
+          </>
+        ) : (
+          <div className="text-center text-gray-400 mt-10">
+            <p>Este módulo não possui aulas.</p>
+          </div>
         )}
-
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 bg-gray-800 rounded-md">
-            <button
-                onClick={handleMarcarComoConcluida}
-                className={`w-full sm:w-auto px-6 py-3 rounded-md font-bold transition-colors ${
-                    isConcluida
-                    ? 'bg-green-600 hover:bg-green-700 text-white'
-                    : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
-                }`}
-            >
-                {isConcluida ? '✓ Aula Concluída' : 'Marcar como Concluída'}
-            </button>
-
-            <button
-                onClick={handleProximo}
-                disabled={isUltimaAulaDoModulo && isConcluida} // Desabilita o botão enquanto redireciona
-                className="w-full sm:w-auto bg-blue-600 text-white px-6 py-3 rounded-md font-bold hover:bg-blue-700 disabled:bg-gray-500 disabled:cursor-not-allowed"
-            >
-                {isUltimaAulaDoModulo ? 'Voltar para o Dashboard' : 'Próxima Aula →'}
-            </button>
-        </div>
       </main>
     </div>
   );
