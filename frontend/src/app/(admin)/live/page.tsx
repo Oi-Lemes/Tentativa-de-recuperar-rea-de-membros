@@ -1,3 +1,5 @@
+// frontend/src/app/(admin)/live/page.tsx
+
 "use client";
 
 import { useEffect, useState } from 'react';
@@ -26,7 +28,7 @@ export default function LivePage() {
 
   return (
     <div className="w-full max-w-4xl mx-auto">
-      <nav className="mb-6">
+      <nav className="mb-6 mt-12 md:mt-0">
         <Link href="/dashboard" className="text-blue-400 hover:underline flex items-center gap-2 text-sm sm:text-base">
           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
           Voltar para o Dashboard
@@ -37,7 +39,7 @@ export default function LivePage() {
         
         <div className="relative w-full h-48 sm:h-64 mb-6 rounded-lg overflow-hidden">
           <Image
-            src="/img/fundo dr.png"
+            src="/img/fundodr.png"
             alt="Dr. José Nakamura"
             layout="fill"
             objectFit="cover"
@@ -55,7 +57,7 @@ export default function LivePage() {
           <p className="text-xl sm:text-2xl font-bold text-white mt-2">
             {proximaLive || 'A calcular...'}
           </p>
-          <p className="text-xs text-gray-500 mt-4">(A data é atualizada automaticamente a cada semana)</p>
+          
         </div>
 
         <p className="text-sm text-gray-400 mt-8 max-w-xl">

@@ -37,7 +37,7 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-gray-900 text-white">
+    <main className="flex min-h-screen flex-col items-center justify-center bg-gray-900 text-white p-4">
       <div className="w-full max-w-md p-8 space-y-6 bg-gray-800 rounded-lg shadow-md">
         
         {isSuccess ? (

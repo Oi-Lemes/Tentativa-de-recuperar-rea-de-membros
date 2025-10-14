@@ -153,8 +153,10 @@ export default function AdminLayout({
         )}
       </button>
 
-      <main className={`flex-1 p-6 sm:p-8 lg:p-12 transition-all duration-300 ease-in-out md:ml-72`}>
-        {children}
+      <main className={`flex-1 p-6 sm:p-8 lg:p-12 transition-all duration-300 ease-in-out md:ml-72 flex flex-col items-center`}>
+        <div className="w-full max-w-6xl">
+          {children}
+        </div>
       </main>
 
       <ChatbotNina />

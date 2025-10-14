@@ -1,3 +1,5 @@
+// frontend/src/app/(admin)/modulo/[id]/aula/[aulaId]/page.tsx
+
 "use client";
 
 import { useEffect, useState } from 'react';
@@ -27,7 +29,6 @@ export default function AulaPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Adiciona o script do player da Wistia ao corpo do documento, se não existir
     if (!document.querySelector('script[src="https://fast.wistia.net/player.js"]')) {
       const script = document.createElement('script');
       script.src = "https://fast.wistia.net/player.js";
@@ -123,8 +124,8 @@ export default function AulaPage() {
   }
 
   return (
-    <div>
-      <nav className="mb-4 md:mb-6">
+    <div className="w-full max-w-4xl">
+      <nav className="mb-4 md:mb-6 mt-12 md:mt-0">
         <Link href={`/modulo/${moduleId}`} className="text-blue-400 hover:underline text-sm md:text-base">
           &larr; Voltar para as aulas do {modulo.title}
         </Link>
@@ -137,7 +138,6 @@ export default function AulaPage() {
         <div>
           {aulaAtual.contentUrl ? (
               isVideo ? (
-                // Container específico para vídeo com a proporção correta
                 <div className="w-full aspect-w-16 aspect-h-9 rounded-lg overflow-hidden shadow-lg">
                   <iframe
                     src={aulaAtual.contentUrl}
@@ -149,7 +149,6 @@ export default function AulaPage() {
                   ></iframe>
                 </div>
               ) : (
-                // Container específico para e-book/página web
                 <iframe
                   src={aulaAtual.contentUrl}
                   title={aulaAtual.title}
@@ -158,7 +157,6 @@ export default function AulaPage() {
                 ></iframe>
               )
           ) : (
-            // Mensagem de conteúdo indisponível
             <div className="flex items-center justify-center w-full aspect-video bg-gray-900 rounded-lg">
               <p className="text-gray-400">Conteúdo indisponível para esta aula.</p>
             </div>
