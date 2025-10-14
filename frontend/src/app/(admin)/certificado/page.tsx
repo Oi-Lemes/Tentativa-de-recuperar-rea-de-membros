@@ -26,12 +26,10 @@ export default function CertificadoPage() {
       });
 
       if (response.ok) {
-        // O backend retorna o PDF diretamente, então precisamos tratar como um "blob"
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        // Pega o nome do arquivo do header 'Content-Disposition' se disponível
         const disposition = response.headers.get('content-disposition');
         let filename = 'certificado.pdf';
         if (disposition && disposition.indexOf('attachment') !== -1) {
@@ -59,24 +57,24 @@ export default function CertificadoPage() {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center h-full text-center">
+    <div className="flex flex-col items-center justify-center h-full text-center p-4">
       <header className="mb-8">
-        <h1 className="text-5xl font-bold text-amber-300">Parabéns pela Conclusão!</h1>
-        <p className="text-xl text-gray-300 mt-4">
+        <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-amber-300">Parabéns pela Conclusão!</h1>
+        <p className="text-lg md:text-xl text-gray-300 mt-4 max-w-2xl">
           Você completou todas as aulas do curso Saberes da Floresta.
         </p>
       </header>
       
-      <main className="bg-gray-800/50 p-10 rounded-lg shadow-xl border border-gray-700">
-        <p className="mb-6">
+      <main className="bg-gray-800/50 p-6 sm:p-10 rounded-lg shadow-xl border border-gray-700 w-full max-w-lg">
+        <p className="mb-6 text-base md:text-lg">
           Clique no botão abaixo para gerar e baixar o seu certificado oficial.
         </p>
         <button
           onClick={handleGenerateCertificate}
           disabled={isLoading}
-          className="bg-green-600 text-white font-bold py-4 px-8 rounded-lg text-lg hover:bg-green-700 transition-all duration-300 transform hover:scale-105 disabled:bg-gray-500 disabled:cursor-wait"
+          className="bg-green-600 text-white font-bold py-3 px-6 sm:py-4 sm:px-8 rounded-lg text-base sm:text-lg hover:bg-green-700 transition-all duration-300 transform hover:scale-105 disabled:bg-gray-500 disabled:cursor-wait"
         >
-          {isLoading ? 'Gerando seu certificado...' : '🎓 Gerar Certificado'}
+          {isLoading ? 'A gerar seu certificado...' : '🎓 Gerar Certificado'}
         </button>
         {message && <p className="mt-4 text-red-400">{message}</p>}
       </main>

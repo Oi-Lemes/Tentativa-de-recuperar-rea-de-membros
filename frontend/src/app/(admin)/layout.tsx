@@ -1,5 +1,3 @@
-// Caminho do ficheiro: frontend/src/app/(admin)/layout.tsx
-
 "use client";
 
 import { useEffect, useState } from 'react';
@@ -52,13 +50,12 @@ export default function AdminLayout({
   const router = useRouter();
   const [progressoTotal, setProgressoTotal] = useState(0);
   const [userName, setUserName] = useState('');
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false); // Sidebar fechada por padrão no mobile
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   
   useEffect(() => {
     setIsMounted(true);
-    // Abre a sidebar por padrão em telas maiores
-    if (window.innerWidth >= 768) {
+    if (window.innerWidth >= 1024) { // Alterado para lg (1024px)
       setIsSidebarOpen(true);
     }
   }, []);
@@ -104,11 +101,7 @@ export default function AdminLayout({
         const aulasConcluidasIds = await progressoRes.json();
         const totalAulas = modulos.reduce((acc: number, modulo: any) => acc + modulo.aulas.length, 0);
 
-        if (totalAulas > 0) {
-            setProgressoTotal((aulasConcluidasIds.length / totalAulas) * 100);
-        } else {
-            setProgressoTotal(0);
-        }
+        setProgressoTotal(totalAulas > 0 ? (aulasConcluidasIds.length / totalAulas) * 100 : 0);
     } catch (error) {
         console.error("Erro ao buscar progresso total:", error);
     }
@@ -122,45 +115,35 @@ export default function AdminLayout({
 
   return (
     <div className="flex min-h-screen bg-transparent">
-      {/* Overlay para fechar o menu ao clicar fora no mobile */}
-      {isSidebarOpen && <div onClick={() => setIsSidebarOpen(false)} className="fixed inset-0 bg-black/50 z-30 md:hidden" />}
+      {isSidebarOpen && <div onClick={() => setIsSidebarOpen(false)} className="fixed inset-0 bg-black/50 z-30 lg:hidden" />}
 
       <aside 
         className={`w-72 p-6 flex flex-col shadow-lg fixed top-0 left-0 h-full z-40 transform transition-transform duration-300 ease-in-out`}
         style={{ backgroundColor: '#b9d7a1', color: 'black', transform: isSidebarOpen ? 'translateX(0)' : 'translateX(-100%)' }}
       >
-        <div 
-          className={`flex flex-col items-center mb-10 transition-opacity duration-300 ease-in-out ${
-            isMounted ? 'opacity-100' : 'opacity-0'
-          }`}
-        >
+        <div className={`flex flex-col items-center mb-10 transition-opacity duration-300 ease-in-out ${isMounted ? 'opacity-100' : 'opacity-0'}`}>
             <div className="mb-4 text-center">
               <p className="text-sm text-gray-800">Bem-vindo(a),</p>
               <h2 className="text-xl font-bold text-black truncate w-full">{userName || 'Carregando...'}</h2>
             </div>
-            
             <ProgressCircle percentage={progressoTotal} />
             <h2 className="text-xl font-bold mt-4 text-black">Progresso Total</h2>
         </div>
 
         <nav className="flex flex-col space-y-2">
-          <Link href="/dashboard" onClick={() => window.innerWidth < 768 && setIsSidebarOpen(false)} className="text-lg text-black hover:text-gray-700 p-2 rounded-md hover:bg-white/30">
+          <Link href="/dashboard" onClick={() => window.innerWidth < 1024 && setIsSidebarOpen(false)} className="text-lg text-black hover:text-gray-700 p-2 rounded-md hover:bg-white/30">
             Início / Módulos
           </Link>
         </nav>
 
-        <button
-          onClick={handleLogout}
-          className="mt-auto w-full px-4 py-2 font-bold text-white bg-red-600 rounded-md hover:bg-red-700"
-        >
+        <button onClick={handleLogout} className="mt-auto w-full px-4 py-2 font-bold text-white bg-red-600 rounded-md hover:bg-red-700">
           Sair
         </button>
       </aside>
 
-      {/* Botão de Menu (Hamburguer) */}
       <button 
         onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-        className="fixed top-5 left-4 z-50 p-2 bg-white/50 backdrop-blur-sm rounded-full text-black transition-all duration-300 ease-in-out hover:bg-white/80"
+        className="fixed top-4 left-4 z-50 p-2 bg-white/50 backdrop-blur-sm rounded-full text-black transition-all duration-300 ease-in-out hover:bg-white/80 lg:hidden"
         aria-label="Toggle sidebar"
       >
         {isSidebarOpen ? (
@@ -170,7 +153,7 @@ export default function AdminLayout({
         )}
       </button>
 
-      <main className={`flex-1 p-6 sm:p-8 md:p-12 transition-all duration-300 ease-in-out md:ml-72`}>
+      <main className={`flex-1 p-6 sm:p-8 lg:p-12 transition-all duration-300 ease-in-out lg:ml-72`}>
         {children}
       </main>
 
