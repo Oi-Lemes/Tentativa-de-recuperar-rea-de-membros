@@ -27,7 +27,6 @@ export default function AulaPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Adiciona o script do player da Wistia ao corpo do documento, se não existir
     if (!document.querySelector('script[src="https://fast.wistia.net/player.js"]')) {
       const script = document.createElement('script');
       script.src = "https://fast.wistia.net/player.js";
@@ -123,44 +122,29 @@ export default function AulaPage() {
   }
 
   return (
-    <div>
+    <div className="w-full max-w-4xl mx-auto">
       <nav className="mb-4 md:mb-6">
         <Link href={`/modulo/${moduleId}`} className="text-blue-400 hover:underline text-sm md:text-base">
           &larr; Voltar para as aulas do {modulo.title}
         </Link>
       </nav>
       <header className="mb-4 md:mb-6">
-        <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold">{aulaAtual.title}</h1>
+        <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold leading-tight">{aulaAtual.title}</h1>
       </header>
       <main className="space-y-6">
         
         <div>
           {aulaAtual.contentUrl ? (
               isVideo ? (
-                // Container específico para vídeo com a proporção correta
                 <div className="w-full aspect-w-16 aspect-h-9 rounded-lg overflow-hidden shadow-lg">
-                  <iframe
-                    src={aulaAtual.contentUrl}
-                    title={aulaAtual.title}
-                    allow="autoplay; fullscreen; picture-in-picture"
-                    frameBorder="0"
-                    scrolling="no"
-                    className="w-full h-full"
-                  ></iframe>
+                  <iframe src={aulaAtual.contentUrl} title={aulaAtual.title} allow="autoplay; fullscreen; picture-in-picture" frameBorder="0" scrolling="no" className="w-full h-full"></iframe>
                 </div>
               ) : (
-                // Container específico para e-book/página web
-                <iframe
-                  src={aulaAtual.contentUrl}
-                  title={aulaAtual.title}
-                  frameBorder="0"
-                  className="w-full h-[75vh] rounded-lg shadow-lg"
-                ></iframe>
+                <iframe src={aulaAtual.contentUrl} title={aulaAtual.title} frameBorder="0" className="w-full h-[80vh] rounded-lg shadow-lg"></iframe>
               )
           ) : (
-            // Mensagem de conteúdo indisponível
             <div className="flex items-center justify-center w-full aspect-video bg-gray-900 rounded-lg">
-              <p className="text-gray-400">Conteúdo indisponível para esta aula.</p>
+              <p className="text-gray-400">Conteúdo indisponível.</p>
             </div>
           )}
         </div>
@@ -174,9 +158,7 @@ export default function AulaPage() {
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 bg-gray-800 rounded-md">
             <button
                 onClick={handleMarcarComoConcluida}
-                className={`w-full sm:w-auto px-6 py-3 rounded-md font-bold transition-colors ${
-                    isConcluida ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-700 hover:bg-gray-600'
-                }`}
+                className={`w-full sm:w-auto px-6 py-3 rounded-md font-bold transition-colors ${ isConcluida ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-700 hover:bg-gray-600' }`}
             >
                 {isConcluida ? '✓ Aula Concluída' : 'Marcar como Concluída'}
             </button>

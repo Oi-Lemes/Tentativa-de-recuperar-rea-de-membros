@@ -1,7 +1,7 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
-// Estrutura atualizada com os links iframe corretos e completos
+// Apenas os 6 módulos principais do curso
 const modulosData = [
   {
     title: 'Módulo 1 – Segredos das Plantas Medicinais',
@@ -60,30 +60,29 @@ const modulosData = [
 ];
 
 async function main() {
-  console.log('Iniciando o processo de seeding com os links das páginas web e vídeos...');
-
+  console.log('A iniciar o processo de seeding...');
   await prisma.progressoAula.deleteMany({});
   await prisma.aula.deleteMany({});
   await prisma.modulo.deleteMany({});
-  console.log('Dados antigos deletados.');
+  console.log('Dados antigos eliminados.');
 
   for (const moduloData of modulosData) {
     await prisma.modulo.create({
       data: {
         title: moduloData.title,
         description: moduloData.description,
-        aulas: {
-          create: moduloData.aulas,
-        },
+        aulas: { create: moduloData.aulas },
       },
     });
-    console.log(`Módulo '${moduloData.title}' e suas aulas foram criados.`);
+    console.log(`Módulo '${moduloData.title}' criado.`);
   }
 
+  // CORREÇÃO APLICADA AQUI
+  // O módulo do certificado é criado sem o campo 'aulas', pois não tem nenhuma.
   await prisma.modulo.create({
     data: {
       title: 'Emissão de Certificado',
-      description: 'Parabéns! Emita seu certificado de conclusão.',
+      description: 'Parabéns! Emita o seu certificado de conclusão.',
     },
   });
   console.log('Módulo de Emissão de Certificado criado.');
