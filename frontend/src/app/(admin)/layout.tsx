@@ -55,7 +55,7 @@ export default function AdminLayout({
   
   useEffect(() => {
     setIsMounted(true);
-    if (window.innerWidth >= 1024) { // Alterado para lg (1024px)
+    if (window.innerWidth >= 768) { // Alterado para md (768px)
       setIsSidebarOpen(true);
     }
   }, []);
@@ -115,7 +115,7 @@ export default function AdminLayout({
 
   return (
     <div className="flex min-h-screen bg-transparent">
-      {isSidebarOpen && <div onClick={() => setIsSidebarOpen(false)} className="fixed inset-0 bg-black/50 z-30 lg:hidden" />}
+      {isSidebarOpen && <div onClick={() => setIsSidebarOpen(false)} className="fixed inset-0 bg-black/50 z-30 md:hidden" />}
 
       <aside 
         className={`w-72 p-6 flex flex-col shadow-lg fixed top-0 left-0 h-full z-40 transform transition-transform duration-300 ease-in-out`}
@@ -131,7 +131,7 @@ export default function AdminLayout({
         </div>
 
         <nav className="flex flex-col space-y-2">
-          <Link href="/dashboard" onClick={() => window.innerWidth < 1024 && setIsSidebarOpen(false)} className="text-lg text-black hover:text-gray-700 p-2 rounded-md hover:bg-white/30">
+          <Link href="/dashboard" onClick={() => window.innerWidth < 768 && setIsSidebarOpen(false)} className="text-lg text-black hover:text-gray-700 p-2 rounded-md hover:bg-white/30">
             Início / Módulos
           </Link>
         </nav>
@@ -143,7 +143,7 @@ export default function AdminLayout({
 
       <button 
         onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-        className="fixed top-4 left-4 z-50 p-2 bg-white/50 backdrop-blur-sm rounded-full text-black transition-all duration-300 ease-in-out hover:bg-white/80 lg:hidden"
+        className="fixed top-4 left-4 z-50 p-2 bg-white/50 backdrop-blur-sm rounded-full text-black transition-all duration-300 ease-in-out hover:bg-white/80 md:hidden"
         aria-label="Toggle sidebar"
       >
         {isSidebarOpen ? (
@@ -153,7 +153,7 @@ export default function AdminLayout({
         )}
       </button>
 
-      <main className={`flex-1 p-6 sm:p-8 lg:p-12 transition-all duration-300 ease-in-out lg:ml-72`}>
+      <main className={`flex-1 p-6 sm:p-8 lg:p-12 transition-all duration-300 ease-in-out md:ml-72`}>
         {children}
       </main>
 
