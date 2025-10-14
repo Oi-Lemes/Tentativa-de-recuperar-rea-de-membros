@@ -3,12 +3,13 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import WistiaPlayer from '@/components/WistiaPlayer'; // Importe o novo componente
 
 // Tipos
 interface Aula {
   id: number;
   title: string;
-  videoUrl?: string;
+  contentUrl?: string;
 }
 interface Modulo {
   id: number;
@@ -62,47 +63,24 @@ export default function AulaPage() {
         }
     };
     fetchData();
-  }, [moduleId, router]);
+  }, [moduleId, aulaId, router]);
 
-  if (isLoading) {
-    return <div className="text-center text-white">A carregar conteúdo da aula...</div>;
-  }
+  const aulaAtual = modulo?.aulas.find(a => a.id.toString() === aulaId);
+  const aulaIndex = modulo?.aulas.findIndex(a => a.id.toString() === aulaId) ?? -1;
+  const isUltimaAulaDoModulo = aulaIndex !== -1 && aulaIndex === (modulo?.aulas.length ?? 0) - 1;
+  const isConcluida = aulaAtual ? aulasConcluidas.includes(aulaAtual.id) : false;
 
-  if (error) {
-    return <div className="text-center text-red-400">Erro: {error}</div>;
-  }
-  
-  if (!modulo || !modulo.aulas) {
-    return (
-        <div className="text-center">
-             <h1 className="text-3xl font-bold text-red-400">Erro</h1>
-             <p className="mt-2 text-white">Não foi possível carregar as informações do módulo.</p>
-             <Link href="/dashboard" className="text-blue-400 hover:underline mt-4 block">
-              Voltar para o Dashboard
-            </Link>
-        </div>
-    );
-  }
-
-  const aulaAtual = modulo.aulas.find(a => a.id.toString() === aulaId);
-  
-  if (!aulaAtual) {
-    return (
-        <div className="text-center">
-             <h1 className="text-3xl font-bold text-red-400">Erro</h1>
-             <p className="mt-2 text-white">Esta aula não foi encontrada neste módulo.</p>
-             <Link href={`/modulo/${moduleId}`} className="text-blue-400 hover:underline mt-4 block">
-              Voltar para a lista de aulas
-            </Link>
-        </div>
-    );
-  }
-
-  const aulaIndex = modulo.aulas.findIndex(a => a.id.toString() === aulaId);
-  const isUltimaAulaDoModulo = aulaIndex === modulo.aulas.length - 1;
-  const isConcluida = aulasConcluidas.includes(aulaAtual.id);
+  useEffect(() => {
+    if (isUltimaAulaDoModulo && isConcluida) {
+      const timer = setTimeout(() => {
+        router.push('/dashboard');
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [isConcluida, isUltimaAulaDoModulo, router]);
 
   const handleMarcarComoConcluida = async () => {
+    if (!aulaAtual) return;
     const token = localStorage.getItem('token');
     if(!token) return;
     try {
@@ -121,7 +99,7 @@ export default function AulaPage() {
   };
 
   const handleProximo = () => {
-    if (!isUltimaAulaDoModulo) {
+    if (modulo && !isUltimaAulaDoModulo) {
         const proximaAula = modulo.aulas[aulaIndex + 1];
         router.push(`/modulo/${moduleId}/aula/${proximaAula.id}`);
     } else {
@@ -129,14 +107,38 @@ export default function AulaPage() {
     }
   };
 
-  useEffect(() => {
-    if (isUltimaAulaDoModulo && isConcluida) {
-      const timer = setTimeout(() => {
-        router.push('/dashboard');
-      }, 3000);
-      return () => clearTimeout(timer);
+  const getWistiaMediaId = (url: string | undefined): string | null => {
+    if (!url || !url.includes('wistia.com')) return null;
+    try {
+      const path = new URL(url).pathname;
+      const parts = path.split('/');
+      return parts[parts.length - 1];
+    } catch {
+      return null;
     }
-  }, [isConcluida, isUltimaAulaDoModulo, router]);
+  };
+
+  const wistiaMediaId = getWistiaMediaId(aulaAtual?.contentUrl);
+
+  if (isLoading) {
+    return <div className="text-center text-white">A carregar conteúdo da aula...</div>;
+  }
+
+  if (error) {
+    return <div className="text-center text-red-400">Erro: {error}</div>;
+  }
+  
+  if (!modulo || !aulaAtual) {
+    return (
+        <div className="text-center">
+             <h1 className="text-3xl font-bold text-red-400">Erro</h1>
+             <p className="mt-2 text-white">Não foi possível carregar as informações da aula.</p>
+             <Link href="/dashboard" className="text-blue-400 hover:underline mt-4 block">
+              Voltar para o Dashboard
+            </Link>
+        </div>
+    );
+  }
 
   return (
     <div>
@@ -146,25 +148,33 @@ export default function AulaPage() {
         </Link>
       </nav>
       <header className="mb-6">
-        <h1 className="text-4xl font-bold">{aulaAtual.title}</h1>
+        <h1 className="text-3xl sm:text-4xl font-bold">{aulaAtual.title}</h1>
       </header>
       <main className="space-y-6">
-        <div className="aspect-w-16 aspect-h-9 bg-gray-900 rounded-lg overflow-hidden shadow-lg">
-          {aulaAtual.videoUrl ? (
-            <iframe
-              src={aulaAtual.videoUrl}
-              title={aulaAtual.title}
-              frameBorder="0"
-              allow="autoplay; fullscreen; picture-in-picture"
-              allowFullScreen
-              className="w-full h-full"
-            ></iframe>
+        
+        <div className="bg-gray-900 rounded-lg overflow-hidden shadow-lg w-full">
+          {aulaAtual.contentUrl ? (
+            wistiaMediaId ? (
+              // Player para Vídeo (Wistia) usando o novo componente
+              <WistiaPlayer mediaId={wistiaMediaId} />
+            ) : (
+              // Visualizador para Página Web (E-book)
+              <iframe
+                src={aulaAtual.contentUrl}
+                title={aulaAtual.title}
+                frameBorder="0"
+                className="w-full"
+                style={{ height: '75vh' }}
+              ></iframe>
+            )
           ) : (
-            <div className="flex items-center justify-center h-full">
+            // Mensagem de conteúdo indisponível
+            <div className="flex items-center justify-center w-full aspect-video">
               <p className="text-gray-400">Conteúdo indisponível para esta aula.</p>
             </div>
           )}
         </div>
+
         {isUltimaAulaDoModulo && isConcluida && (
             <div className="bg-green-900/50 border border-green-700 text-green-300 px-4 py-3 rounded-lg text-center animate-pulse">
                 <h3 className="font-bold text-lg">Parabéns!</h3>

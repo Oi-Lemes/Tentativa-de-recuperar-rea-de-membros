@@ -3,13 +3,11 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 
-// Tipos
 type Message = {
     role: 'user' | 'assistant';
     text: string;
 };
 
-// Função auxiliar para encontrar um tipo de MIME suportado
 const getSupportedMimeType = () => {
     const types = ['audio/webm; codecs=opus', 'audio/ogg; codecs=opus', 'audio/webm'];
     if (typeof MediaRecorder === 'undefined') return null;
@@ -19,15 +17,12 @@ const getSupportedMimeType = () => {
     return null;
 };
 
-// O Componente do Chatbot
 export default function ChatbotNina() {
-    // --- Estados do Componente ---
     const [isOpen, setIsOpen] = useState(false);
     const [isRecording, setIsRecording] = useState(false);
     const [isSpeaking, setIsSpeaking] = useState(false);
     const [messages, setMessages] = useState<Message[]>([]);
     
-    // --- Refs para persistir valores entre renderizações ---
     const ws = useRef<WebSocket | null>(null);
     const mediaRecorder = useRef<MediaRecorder | null>(null);
     const streamRef = useRef<MediaStream | null>(null);
@@ -153,17 +148,19 @@ export default function ChatbotNina() {
     return (
         <>
             <audio ref={audioPlayerRef} className="hidden" onEnded={() => setIsSpeaking(false)} />
-            {/* --- BOTÃO DA NINA COM A COR ALTERADA --- */}
             <button 
                 onClick={() => setIsOpen(prev => !prev)} 
                 className="fixed bottom-4 right-4 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-transform hover:scale-110 z-50 text-2xl"
-                style={{ backgroundColor: '#a45785' }} // Cor aplicada diretamente
+                style={{ backgroundColor: '#a45785' }}
             >
                 🌿
             </button>
 
             {isOpen && (
-                <div className="fixed bottom-20 right-4 w-80 h-[500px] bg-gray-800 rounded-lg shadow-2xl flex flex-col z-50">
+                // Container do Chatbot com classes responsivas
+                <div className="fixed bottom-0 right-0 h-[75vh] w-full bg-gray-800 shadow-2xl flex flex-col z-50
+                                md:bottom-20 md:right-4 md:w-80 md:h-[500px] md:rounded-lg">
+                    
                     <div className="bg-gray-900 p-3 flex justify-between items-center rounded-t-lg flex-shrink-0">
                         <h3 className="font-bold text-white">Nina, a sua Herbalista</h3>
                         <button onClick={() => { disconnect(); setIsOpen(false); }} className="text-gray-300 hover:text-white text-2xl leading-none">&times;</button>

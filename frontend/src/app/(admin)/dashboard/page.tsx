@@ -4,18 +4,6 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 
-// Tipos para os dados que virão da API
-interface Aula {
-  id: number;
-}
-interface Modulo {
-  id: number;
-  title: string;
-  description: string;
-  aulas: Aula[];
-}
-
-// Componente para o Círculo de Progresso
 const ProgressCircle = ({ percentage }: { percentage: number }) => {
   const strokeWidth = 8;
   const radius = 35;
@@ -35,7 +23,7 @@ const ProgressCircle = ({ percentage }: { percentage: number }) => {
           cy={radius}
         />
         <circle
-          stroke="#FFD700" // Dourado para o progresso
+          stroke="#FFD700"
           fill="transparent"
           strokeWidth={strokeWidth}
           strokeDasharray={`${circumference} ${circumference}`}
@@ -54,7 +42,7 @@ const ProgressCircle = ({ percentage }: { percentage: number }) => {
 };
 
 export default function DashboardPage() {
-  const [modulos, setModulos] = useState<Modulo[]>([]);
+  const [modulos, setModulos] = useState<any[]>([]);
   const [aulasConcluidas, setAulasConcluidas] = useState<number[]>([]);
 
   useEffect(() => {
@@ -85,33 +73,35 @@ export default function DashboardPage() {
     fetchData();
   }, []);
 
-  const getProgressoModulo = (modulo: Modulo) => {
+  const getProgressoModulo = (modulo: any) => {
     if (!modulo || modulo.aulas.length === 0) return 0;
 
-    const aulasDoModuloIds = modulo.aulas.map(a => a.id);
-    const concluidasNesteModulo = aulasDoModuloIds.filter(id => aulasConcluidas.includes(id));
+    const aulasDoModuloIds = modulo.aulas.map((a: any) => a.id);
+    const concluidasNesteModulo = aulasDoModuloIds.filter((id: number) => aulasConcluidas.includes(id));
 
     return (concluidasNesteModulo.length / aulasDoModuloIds.length) * 100;
   };
 
   return (
     <section>
-      {/* --- TÍTULO COM O EFEITO DE ESCRITA CONTÍNUA --- */}
       <div className="text-center mb-12">
-        <svg viewBox="0 0 800 100" className="w-full max-w-3xl mx-auto">
+        <svg viewBox="0 0 800 100" className="w-full max-w-sm sm:max-w-md md:max-w-3xl mx-auto">
           <defs>
             <linearGradient id="titleGradient" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="60%" stopColor="#FFFFFF" />
               <stop offset="100%" stopColor="#A0A0A0" />
             </linearGradient>
           </defs>
-          <text className="handwriting-title" x="50%" y="50%" dy=".35em" textAnchor="middle">
+          <text 
+             className="handwriting-title" 
+             style={{fontSize: 'clamp(40px, 10vw, 80px)'}} 
+             x="50%" y="50%" dy=".35em" textAnchor="middle">
             Área de Membros
           </text>
         </svg>
       </div>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
         {modulos.map((modulo, index) => {
           const progresso = getProgressoModulo(modulo);
           const progressoAnterior = index > 0 ? getProgressoModulo(modulos[index - 1]) : 100;
@@ -146,12 +136,12 @@ export default function DashboardPage() {
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent"></div>
               </div>
 
-              <div className="absolute bottom-0 left-0 p-6 text-white w-full">
-                <h3 className="text-2xl font-bold uppercase tracking-wider">{modulo.title}</h3>
+              <div className="absolute bottom-0 left-0 p-4 md:p-6 text-white w-full">
+                <h3 className="text-xl md:text-2xl font-bold uppercase tracking-wider">{modulo.title}</h3>
                 {modulo.title === 'Emissão de Certificado' ? (
-                    <p className="text-amber-300 text-sm">🏆 {modulo.description}</p>
+                    <p className="text-amber-300 text-sm mt-1">🏆 {modulo.description}</p>
                 ) : (
-                    <p className="text-gray-300 text-sm">{modulo.description}</p>
+                    <p className="text-gray-300 text-sm mt-1">{modulo.description}</p>
                 )}
               </div>
 

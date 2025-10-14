@@ -66,6 +66,7 @@ export default function ModuloPage() {
     fetchData();
   }, [id, router]);
   
+  // Lógica de Renderização à Prova de Erros
   if (isLoading) {
     return <div className="text-center text-white">A carregar...</div>;
   }

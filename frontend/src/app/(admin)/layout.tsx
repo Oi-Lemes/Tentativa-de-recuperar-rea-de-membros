@@ -7,7 +7,6 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import ChatbotNina from '@/components/ChatbotNina';
 
-// --- COMPONENTE DO CÍRCULO DE PROGRESSO ATUALIZADO ---
 const ProgressCircle = ({ percentage }: { percentage: number }) => {
     const strokeWidth = 8;
     const radius = 60;
@@ -15,21 +14,18 @@ const ProgressCircle = ({ percentage }: { percentage: number }) => {
     const circumference = normalizedRadius * 2 * Math.PI;
     const strokeDashoffset = circumference - (percentage / 100) * circumference;
 
-    // Função que define a cor com base na percentagem
     const getColor = () => {
-        if (percentage < 33) return '#ef4444'; // Vermelho
-        if (percentage < 66) return '#f59e0b'; // Amarelo/Âmbar
-        return '#22c55e'; // Verde
+        if (percentage < 33) return '#ef4444';
+        if (percentage < 66) return '#f59e0b';
+        return '#22c55e';
     };
 
     return (
       <div className="relative">
         <svg height={radius * 2} width={radius * 2} className="-rotate-90">
-          {/* Cor de fundo do círculo (trilha) */}
           <circle stroke="#a3b892" fill="transparent" strokeWidth={strokeWidth} r={normalizedRadius} cx={radius} cy={radius} />
-          {/* Círculo de progresso com cor dinâmica */}
           <circle
-            stroke={getColor()} // Cor dinâmica aplicada aqui
+            stroke={getColor()}
             fill="transparent"
             strokeWidth={strokeWidth}
             strokeDasharray={`${circumference} ${circumference}`}
@@ -56,12 +52,15 @@ export default function AdminLayout({
   const router = useRouter();
   const [progressoTotal, setProgressoTotal] = useState(0);
   const [userName, setUserName] = useState('');
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false); // Sidebar fechada por padrão no mobile
   const [isMounted, setIsMounted] = useState(false);
   
   useEffect(() => {
-    const timer = setTimeout(() => setIsMounted(true), 100);
-    return () => clearTimeout(timer);
+    setIsMounted(true);
+    // Abre a sidebar por padrão em telas maiores
+    if (window.innerWidth >= 768) {
+      setIsSidebarOpen(true);
+    }
   }, []);
 
   useEffect(() => {
@@ -123,15 +122,17 @@ export default function AdminLayout({
 
   return (
     <div className="flex min-h-screen bg-transparent">
+      {/* Overlay para fechar o menu ao clicar fora no mobile */}
+      {isSidebarOpen && <div onClick={() => setIsSidebarOpen(false)} className="fixed inset-0 bg-black/50 z-30 md:hidden" />}
+
       <aside 
-        className={`w-72 p-6 flex flex-col shadow-lg fixed top-0 left-0 h-full z-40 transform transition-transform duration-500 ease-in-out`}
-        style={{ backgroundColor: '#b9d7a1', color: 'black', transform: isSidebarOpen && isMounted ? 'translateX(0)' : 'translateX(-100%)' }}
+        className={`w-72 p-6 flex flex-col shadow-lg fixed top-0 left-0 h-full z-40 transform transition-transform duration-300 ease-in-out`}
+        style={{ backgroundColor: '#b9d7a1', color: 'black', transform: isSidebarOpen ? 'translateX(0)' : 'translateX(-100%)' }}
       >
         <div 
-          className={`flex flex-col items-center mb-10 transition-all duration-500 ease-in-out ${
+          className={`flex flex-col items-center mb-10 transition-opacity duration-300 ease-in-out ${
             isMounted ? 'opacity-100' : 'opacity-0'
           }`}
-          style={{ transitionDelay: isMounted ? '300ms' : '0ms' }}
         >
             <div className="mb-4 text-center">
               <p className="text-sm text-gray-800">Bem-vindo(a),</p>
@@ -142,43 +143,34 @@ export default function AdminLayout({
             <h2 className="text-xl font-bold mt-4 text-black">Progresso Total</h2>
         </div>
 
-        <nav 
-          className={`flex flex-col space-y-2 transition-opacity duration-500 ease-in-out ${
-            isMounted ? 'opacity-100' : 'opacity-0'
-          }`}
-          style={{ transitionDelay: isMounted ? '400ms' : '0ms' }}
-        >
-          <Link href="/dashboard" className="text-lg text-black hover:text-gray-700 p-2 rounded-md hover:bg-white/30">
+        <nav className="flex flex-col space-y-2">
+          <Link href="/dashboard" onClick={() => window.innerWidth < 768 && setIsSidebarOpen(false)} className="text-lg text-black hover:text-gray-700 p-2 rounded-md hover:bg-white/30">
             Início / Módulos
           </Link>
         </nav>
 
         <button
           onClick={handleLogout}
-          className={`mt-auto w-full px-4 py-2 font-bold text-white bg-red-600 rounded-md hover:bg-red-700 transition-opacity duration-500 ease-in-out ${
-            isMounted ? 'opacity-100' : 'opacity-0'
-          }`}
-          style={{ transitionDelay: isMounted ? '500ms' : '0ms' }}
+          className="mt-auto w-full px-4 py-2 font-bold text-white bg-red-600 rounded-md hover:bg-red-700"
         >
           Sair
         </button>
       </aside>
 
+      {/* Botão de Menu (Hamburguer) */}
       <button 
         onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-        className={`fixed top-5 z-50 p-2 bg-white/50 backdrop-blur-sm rounded-full text-black transition-all duration-500 ease-in-out hover:bg-white/80 ${
-          isSidebarOpen ? 'left-64' : 'left-4'
-        }`}
+        className="fixed top-5 left-4 z-50 p-2 bg-white/50 backdrop-blur-sm rounded-full text-black transition-all duration-300 ease-in-out hover:bg-white/80"
         aria-label="Toggle sidebar"
       >
-        <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 transition-transform duration-500 ${isSidebarOpen ? '' : 'rotate-180'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-        </svg>
+        {isSidebarOpen ? (
+           <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+        ) : (
+           <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" /></svg>
+        )}
       </button>
 
-      <main className={`flex-1 p-12 transition-all duration-500 ease-in-out ${
-        isSidebarOpen ? 'ml-72' : 'ml-0'
-      }`}>
+      <main className={`flex-1 p-6 sm:p-8 md:p-12 transition-all duration-300 ease-in-out md:ml-72`}>
         {children}
       </main>
 
