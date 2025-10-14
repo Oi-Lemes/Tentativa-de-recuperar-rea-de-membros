@@ -32,7 +32,7 @@ export default function AulaPage() {
         setError(null);
         const token = localStorage.getItem('token');
         if (!token || !moduleId) {
-            router.push('/'); // Redireciona se não houver token
+            router.push('/');
             return;
         }
         
@@ -63,8 +63,6 @@ export default function AulaPage() {
     };
     fetchData();
   }, [moduleId, router]);
-
-  // --- LÓGICA DE RENDERIZAÇÃO À PROVA DE FALHAS ---
 
   if (isLoading) {
     return <div className="text-center text-white">A carregar conteúdo da aula...</div>;
@@ -131,7 +129,6 @@ export default function AulaPage() {
     }
   };
 
-  // Redirecionamento após concluir a última aula
   useEffect(() => {
     if (isUltimaAulaDoModulo && isConcluida) {
       const timer = setTimeout(() => {

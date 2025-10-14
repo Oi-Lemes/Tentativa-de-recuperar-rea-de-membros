@@ -66,7 +66,6 @@ export default function ModuloPage() {
     fetchData();
   }, [id, router]);
   
-  // Lógica de Renderização à Prova de Erros
   if (isLoading) {
     return <div className="text-center text-white">A carregar...</div>;
   }
@@ -83,7 +82,6 @@ export default function ModuloPage() {
     );
   }
 
-  // Se chegou aqui, 'modulo' existe.
   const temAulas = modulo.aulas && modulo.aulas.length > 0;
 
   return (
@@ -102,12 +100,11 @@ export default function ModuloPage() {
         <p className="text-lg text-gray-400">{modulo.description}</p>
       </header>
       <main>
-        {/* --- ESTA É A VERIFICAÇÃO QUE RESOLVE O PROBLEMA --- */}
         {temAulas ? (
           <>
             <h2 className="text-2xl font-semibold mb-4">Aulas do Módulo</h2>
             <div className="flex flex-col space-y-4">
-                {modulo.aulas!.map((aula, index) => { // O '!' diz que temos a certeza que 'aulas' existe aqui
+                {modulo.aulas!.map((aula, index) => {
                   const isConcluida = aulasConcluidas.includes(aula.id);
                   return (
                     <Link 
