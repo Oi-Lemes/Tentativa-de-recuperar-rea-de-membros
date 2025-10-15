@@ -67,7 +67,6 @@ export default function DashboardPage() {
   const totalConcluidasPrincipais = modulosPrincipais.flatMap(m => m.aulas).filter((a: any) => aulasConcluidas.includes(a.id)).length;
   const cursoConcluido = totalAulasPrincipais > 0 && totalConcluidasPrincipais >= totalAulasPrincipais;
 
-  // Lista final de módulos a serem exibidos, incluindo os bónus
   const modulosParaExibir = [
     ...modulosPrincipais,
     { id: 98, title: 'Live com o Dr. José Nakamura', description: 'Um encontro exclusivo para tirar dúvidas.', aulas: [] },
@@ -82,14 +81,15 @@ export default function DashboardPage() {
   }
 
   return (
-    <section>
-      <div className="text-center mb-10 md:mb-12">
+    <section className="flex flex-col items-center w-full">
+      <div className="text-center mb-10 md:mb-12 px-12 md:px-0">
         <h1 className="font-handwriting text-5xl sm:text-6xl md:text-7xl lg:text-8xl text-white" style={{ fontFamily: 'var(--font-great-vibes)' }}>
           Área de Membros
         </h1>
       </div>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
+      {/* ALTERAÇÃO FINAL E CORRETA AQUI */}
+      <div className="w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
         {modulosParaExibir.map((modulo, index) => {
           
           let progressoAnterior = index > 0 ? getProgressoModulo(modulosParaExibir[index - 1]) : 100;
@@ -102,18 +102,15 @@ export default function DashboardPage() {
           if (modulo.title.includes('Live')) {
             destinationUrl = '/live';
             imageUrl = '/img/md8.jpg';
-            // A Live só desbloqueia quando o curso principal (Módulos 1-6) estiver concluído
             isLocked = !cursoConcluido;
           } else if (modulo.title.includes('Whatsapp')) {
             destinationUrl = '#';
             imageUrl = '/img/md9.jpg';
-            // O WhatsApp está sempre bloqueado
             isLocked = true; 
             lockMessage = "Acesso liberado após a live";
           } else if (modulo.title.includes('Certificado')) {
             destinationUrl = '/certificado';
             imageUrl = '/img/md7.jpg';
-            // A lógica `cursoConcluido` já garante que ele só aparece quando deve, então não precisa de lock.
             isLocked = false; 
           }
 
