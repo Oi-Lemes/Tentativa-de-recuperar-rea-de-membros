@@ -56,7 +56,7 @@ const PwaInstallPrompt = () => {
   if (isInstalled) {
     return (
       <div className="flex items-center justify-center text-center text-sm text-green-400 bg-gray-900/50 p-3 rounded-md border border-gray-700">
-        <p>✅ Aplicação instalada! Procure o ícone no seu ecrã principal.</p>
+        <p>✅ App instalado! Procure o ícone na sua tela inicial.</p>
       </div>
     );
   }
