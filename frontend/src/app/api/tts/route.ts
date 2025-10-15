@@ -8,28 +8,29 @@ const openai = new OpenAI({
 
 export async function GET(req: NextRequest) {
     try {
-        const text = req.nextUrl.searchParams.get('text');
+        const searchParams = req.nextUrl.searchParams;
+        const text = searchParams.get('text');
 
         if (!text) {
-            return new Response("O texto é obrigatório.", { status: 400 });
+            return new Response(JSON.stringify({ error: "O texto é obrigatório." }), { status: 400 });
         }
 
         const mp3 = await openai.audio.speech.create({
-            model: "tts-1",
-            // --- ALTERAÇÃO AQUI ---
-            voice: "shimmer", // Voz alterada de "nova" para "shimmer"
+            model: "tts-1-hd", // <-- A melhor qualidade de voz para maior fluidez e naturalidade.
+            voice: "fable",    // <-- Uma voz com entoação mais natural para narração.
             input: text,
-            response_format: "mp3",
         });
         
         const buffer = Buffer.from(await mp3.arrayBuffer());
 
         return new Response(buffer, {
-            headers: { 'Content-Type': 'audio/mpeg' },
+            headers: {
+                'Content-Type': 'audio/mpeg',
+            },
         });
 
     } catch (error) {
-        console.error("Erro inesperado ao processar a requisição de TTS com OpenAI:", error);
-        return new Response("Ocorreu um erro interno no servidor ao tentar gerar o áudio.", { status: 500 });
+        console.error("Erro na API de TTS do OpenAI:", error);
+        return new Response(JSON.stringify({ error: "Desculpe, não consigo falar agora." }), { status: 500 });
     }
 }
