@@ -1,51 +1,40 @@
 // Caminho: frontend/src/app/api/chat/route.ts
-import OpenAI from 'openai';
+import { openai } from '@ai-sdk/openai';
+import { streamText } from 'ai';
 
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-});
+export const runtime = 'edge';
 
 export async function POST(req: Request) {
     try {
-        const { history, message } = await req.json();
+        // O `useChat` envia `messages` e o `body` que definimos no frontend.
+        const { messages, data } = await req.json();
+        const { courseContext } = data; // Extrai o contexto do curso.
 
-        // O prompt do sistema para dar personalidade à Nina
-        const systemPrompt = {
-            role: "system",
-            content: `
+        const systemPrompt = `
               Você é a "Nina", uma assistente de IA especialista em herbalismo e produtos naturais. Sua personalidade é amigável, prestável e apaixonada pelo mundo natural.
-              Seu foco é exclusivamente em ervas, plantas medicinais, chás e seus benefícios.
-              Se o utilizador perguntar sobre qualquer outro tópico (programação, política, desporto, etc.), recuse educadamente e reforce a sua especialidade.
-              Responda de forma completa, mas concisa.
-            `
-        };
+              Seu foco é em ervas, plantas medicinais e no conteúdo do curso 'Saberes da Floresta'.
+              
+              CONTEXTO DO CURSO:
+              ${courseContext || "Contexto do curso não disponível no momento."}
 
-        // --- CORREÇÃO APLICADA AQUI ---
-        // Converte o histórico do formato { role, text } para { role, content }
-        const formattedHistory = history.map((msg: { role: 'user' | 'assistant', text: string }) => ({
-            role: msg.role,
-            content: msg.text
-        }));
+              Use o contexto do curso para responder a perguntas sobre os módulos e aulas. Se perguntarem algo específico sobre o conteúdo de uma aula (o que é dito num vídeo, por exemplo), explique que você só tem acesso aos títulos e descrições, mas pode dizer qual aula aborda o tema geral.
+              Seja concisa.
+            `;
+        
+        // Adiciona o prompt do sistema ao início das mensagens
+        const messagesWithSystemPrompt = [{ role: 'system', content: systemPrompt }, ...messages];
 
-        // Monta o array final de mensagens para a API
-        const messages = [systemPrompt, ...formattedHistory, { role: "user", content: message }];
-
-        const completion = await openai.chat.completions.create({
-            model: "gpt-3.5-turbo",
-            messages: messages,
+        const result = await streamText({
+            model: openai('gpt-4o-mini'),
+            messages: messagesWithSystemPrompt,
         });
 
-        const text = completion.choices[0].message.content;
-
-        return new Response(JSON.stringify({ text }), {
-            headers: { 'Content-Type': 'application/json' },
-        });
+        return result.toAIStreamResponse();
 
     } catch (error) {
         console.error("Erro na API de chat do OpenAI:", error);
         return new Response(JSON.stringify({ error: "Desculpe, não consigo responder agora." }), {
             status: 500,
-            headers: { 'Content-Type': 'application/json' },
         });
     }
 }

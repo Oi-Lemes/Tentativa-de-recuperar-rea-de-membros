@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next"; // Importa o Viewport
 import { Great_Vibes } from "next/font/google";
 import "./globals.css";
 
@@ -9,17 +9,20 @@ const greatVibes = Great_Vibes({
   display: 'swap',
 });
 
-// METADATA ATUALIZADO PARA INCLUIR CONFIGURAÇÕES DE PWA
 export const metadata: Metadata = {
   title: "Área de Membros",
   description: "Acesso exclusivo para membros",
   manifest: "/manifest.json",
-  themeColor: "#b9d7a1",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
     title: "Membros",
   },
+};
+
+// --- ALTERAÇÃO AQUI: themeColor movido para viewport ---
+export const viewport: Viewport = {
+  themeColor: "#b9d7a1",
 };
 
 export default function RootLayout({

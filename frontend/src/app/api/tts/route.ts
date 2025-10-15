@@ -1,13 +1,14 @@
 // Caminho: frontend/src/app/api/tts/route.ts
 import OpenAI from 'openai';
+import { NextRequest } from 'next/server';
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
 });
 
-export async function POST(req: Request) {
+export async function GET(req: NextRequest) {
     try {
-        const { text } = await req.json();
+        const text = req.nextUrl.searchParams.get('text');
 
         if (!text) {
             return new Response("O texto é obrigatório.", { status: 400 });
@@ -15,12 +16,12 @@ export async function POST(req: Request) {
 
         const mp3 = await openai.audio.speech.create({
             model: "tts-1",
-            voice: "nova", // 'nova' é uma das vozes da OpenAI
+            // --- ALTERAÇÃO AQUI ---
+            voice: "shimmer", // Voz alterada de "nova" para "shimmer"
             input: text,
             response_format: "mp3",
         });
         
-        // Converte o stream de resposta para um buffer
         const buffer = Buffer.from(await mp3.arrayBuffer());
 
         return new Response(buffer, {
