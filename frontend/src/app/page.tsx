@@ -2,18 +2,28 @@
 
 import { useState, useEffect } from "react";
 
-// --- COMPONENTE PWA ATUALIZADO ---
+// --- COMPONENTES DE ÍCONES ---
 
 const PhoneIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
   </svg>
 );
 
+// Novo ícone de partilha para o tutorial do iOS
+const ShareIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 inline-block mx-1" viewBox="0 0 20 20" fill="currentColor">
+        <path d="M15 8a3 3 0 10-2.977-2.63l-4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 10.895-1.789l-4.94-2.47a3.027 3.027 0 000-.74l4.94-2.47C13.456 7.68 14.19 8 15 8z" />
+    </svg>
+);
+
+
+// --- COMPONENTE PWA ATUALIZADO ---
+
 const PwaInstallPrompt = () => {
   const [installPrompt, setInstallPrompt] = useState<any>(null);
   const [showIOSInstruction, setShowIOSInstruction] = useState(false);
-  const [isInstalled, setIsInstalled] = useState(false); // Novo estado para a mensagem de sucesso
+  const [isInstalled, setIsInstalled] = useState(false);
 
   useEffect(() => {
     if ('serviceWorker' in navigator && process.env.NODE_ENV !== 'development') {
@@ -47,21 +57,19 @@ const PwaInstallPrompt = () => {
     const { outcome } = await installPrompt.userChoice;
     if (outcome === 'accepted') {
       console.log('Utilizador instalou a app');
-      setIsInstalled(true); // Mostra a mensagem de sucesso
+      setIsInstalled(true);
     }
     setInstallPrompt(null);
   };
 
-  // 1. Mostra a mensagem de sucesso se a instalação foi aceite
   if (isInstalled) {
     return (
       <div className="flex items-center justify-center text-center text-sm text-green-400 bg-gray-900/50 p-3 rounded-md border border-gray-700">
-        <p>✅ App instalado! Procure o ícone na sua tela inicial.</p>
+        <p>✅ Aplicação instalada! Procure o ícone no seu ecrã principal.</p>
       </div>
     );
   }
 
-  // 2. Se for instalável, mostra o botão a pulsar
   if (installPrompt) {
     return (
       <button
@@ -74,12 +82,19 @@ const PwaInstallPrompt = () => {
     );
   }
 
-  // 3. Se for iOS, mostra a instrução a pulsar
   if (showIOSInstruction) {
     return (
-      <div className="flex items-center justify-center text-center text-sm text-gray-400 bg-gray-900/50 p-3 rounded-md border border-gray-700 animate-pulse">
-        <PhoneIcon />
-        <p>Para instalar no iPhone, toque em Partilha e "Adicionar ao Ecrã Principal".</p>
+      <div className="flex flex-col items-center space-y-4 text-center bg-gray-900/50 p-4 rounded-md border border-gray-700 animate-pulse">
+        {/* ALTERAÇÃO AQUI: Mensagem para iOS mais visível e em PT-BR */}
+        <div className="flex items-center text-base text-gray-200 font-semibold">
+          <p>Para instalar no iPhone, toque em <ShareIcon /> "Compartilhar" e depois em "Adicionar à Tela de Início".</p>
+        </div>
+        <img
+          src="https://media1.giphy.com/media/v1.Y2lkPTc5MGI3NjExMzdqYjIyZGlvbHhzbzh0dXozYmE5dTJ3anVwbXd6Nm50b2oxYWp6YyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/Sr7k4SirUQ0GP7MII4/giphy.gif"
+          alt="Tutorial de instalação no iOS"
+          width="180"
+          className="rounded-lg"
+        />
       </div>
     );
   }
@@ -88,7 +103,7 @@ const PwaInstallPrompt = () => {
 };
 
 
-// --- PÁGINA DE LOGIN (sem outras alterações) ---
+// --- PÁGINA DE LOGIN ---
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -136,7 +151,7 @@ export default function LoginPage() {
             <div className="mb-6">
               <PwaInstallPrompt />
             </div>
-            <h1 className="text-3xl font-bold text-center">Acessar área de Membros</h1>
+            <h1 className="text-3xl font-bold text-center">Aceder à Área de Membros</h1>
             <p className="text-center text-gray-400">Insira o email que usou na compra para receber o seu link de acesso.</p>
             <form onSubmit={handleSubmit} className="space-y-6">
               <div>
