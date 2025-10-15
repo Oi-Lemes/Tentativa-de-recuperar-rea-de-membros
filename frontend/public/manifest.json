@@ -1,6 +1,6 @@
 {
-  "name": "Área de Membros - Saberes da Floresta",
-  "short_name": "Membros",
+  "name": "Saberes da Floresta",
+  "short_name": "Saberes",
   "description": "Acesso exclusivo para membros do curso Saberes da Floresta.",
   "start_url": "/",
   "display": "standalone",
