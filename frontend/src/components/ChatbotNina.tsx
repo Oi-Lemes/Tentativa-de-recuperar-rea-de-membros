@@ -132,7 +132,7 @@ export default function ChatbotNina() {
             ws.current.onerror = (err) => { console.error("CLIENTE: WebSocket Error:", err); setIsRecording(false); };
 
         } catch (error) {
-            alert("Não foi possível aceder ao microfone. Verifique as permissões.");
+            alert("Não foi possível acessar o microfone. Verifique as permissões.");
             setIsRecording(false);
         }
     }, [isRecording]);

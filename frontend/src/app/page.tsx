@@ -65,7 +65,7 @@ const PwaInstallPrompt = () => {
   if (isInstalled) {
     return (
       <div className="flex items-center justify-center text-center text-sm text-green-400 bg-gray-900/50 p-3 rounded-md border border-gray-700">
-        <p>✅ Aplicação instalada! Procure o ícone no seu ecrã principal.</p>
+        <p>✅ App instalado! Procure o ícone na tela inicial do seu celular!.</p>
       </div>
     );
   }
@@ -144,14 +144,14 @@ export default function LoginPage() {
           <div className="text-center">
             <h1 className="text-2xl font-bold text-green-400">Verifique o seu Email!</h1>
             <p className="mt-4 text-gray-300">{message}</p>
-            <p className="mt-2 text-sm text-gray-400">Enviámos um link mágico para a sua caixa de entrada. Clique nele para aceder à sua conta.</p>
+            <p className="mt-2 text-sm text-gray-400">Enviámos um link mágico para a sua caixa de entrada. Clique nele para acessar à sua conta.</p>
           </div>
         ) : (
           <>
             <div className="mb-6">
               <PwaInstallPrompt />
             </div>
-            <h1 className="text-3xl font-bold text-center">Aceder à Área de Membros</h1>
+            <h1 className="text-3xl font-bold text-center">Acessar a Área de membros</h1>
             <p className="text-center text-gray-400">Insira o email que usou na compra para receber o seu link de acesso.</p>
             <form onSubmit={handleSubmit} className="space-y-6">
               <div>
