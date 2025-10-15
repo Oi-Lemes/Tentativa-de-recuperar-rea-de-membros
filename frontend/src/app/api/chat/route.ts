@@ -9,8 +9,7 @@ export async function POST(req: Request) {
     try {
         const { history, message } = await req.json();
 
-        // O prompt do sistema já é tratado no backend para a versão de voz.
-        // Aqui, adicionamos para a versão de texto.
+        // O prompt do sistema para dar personalidade à Nina
         const systemPrompt = {
             role: "system",
             content: `
@@ -21,10 +20,18 @@ export async function POST(req: Request) {
             `
         };
 
-        const messages = [systemPrompt, ...history, { role: "user", content: message }];
+        // --- CORREÇÃO APLICADA AQUI ---
+        // Converte o histórico do formato { role, text } para { role, content }
+        const formattedHistory = history.map((msg: { role: 'user' | 'assistant', text: string }) => ({
+            role: msg.role,
+            content: msg.text
+        }));
+
+        // Monta o array final de mensagens para a API
+        const messages = [systemPrompt, ...formattedHistory, { role: "user", content: message }];
 
         const completion = await openai.chat.completions.create({
-            model: "gpt-3.5-turbo", // USANDO O MODELO MAIS ACESSÍVEL
+            model: "gpt-3.5-turbo",
             messages: messages,
         });
 

@@ -1,23 +1,17 @@
 require('dotenv').config();
 
-// 1. Importações
+// 1. Importações simplificadas
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const jwt = require('jsonwebtoken');
-const cors = require('cors'); // Importação do CORS
-const http = require('http');
-const { WebSocketServer } = require('ws');
-const OpenAI = require('openai');
-const { Readable } = require('stream');
+const cors = require('cors');
 const { spawn } = require('child_process');
 const crypto = require('crypto');
 
 // --- Configuração do CORS ---
-// Esta é a alteração mais importante.
-// Adicionamos o URL do seu frontend (da Vercel) à lista de permissões.
 const corsOptions = {
-  origin: process.env.FRONTEND_URL, // Permite apenas que o seu frontend faça pedidos
-  optionsSuccessStatus: 200 // Para browsers mais antigos
+  origin: process.env.FRONTEND_URL,
+  optionsSuccessStatus: 200
 };
 
 
@@ -58,13 +52,10 @@ async function main() {
   try {
     const app = express();
     
-    // APLICAR A NOVA CONFIGURAÇÃO DO CORS
     app.use(cors(corsOptions)); 
-    
     app.use(express.json());
     const prisma = new PrismaClient();
     const PORT = process.env.PORT || 3001;
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
     // --- ROTAS DE AUTENTICAÇÃO COM LINK MÁGICO ---
     app.post('/auth/magic-link', async (req, res) => {
@@ -251,46 +242,7 @@ async function main() {
       }
     });
 
-    const server = http.createServer(app);
-    const wss = new WebSocketServer({ server });
-    wss.on('connection', (ws) => {
-        console.log('✅ Cliente WebSocket conectado!');
-        let audioBuffers = [];
-        let conversationHistory = [{ role: "system", content: `Você é a "Nina", uma assistente de IA especialista em herbalismo...` }];
-        
-        const processAudio = async () => {
-            if (audioBuffers.length === 0) return;
-            const audioBuffer = Buffer.concat(audioBuffers);
-            audioBuffers = [];
-            try {
-                const audioStream = Readable.from(audioBuffer);
-                const transcription = await openai.audio.transcriptions.create({ file: await OpenAI.toFile(audioStream, 'audio.webm'), model: 'whisper-1', language: 'pt' });
-                const userText = transcription.text;
-                if (!userText.trim()) return;
-                if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: 'user_transcript', text: userText }));
-                conversationHistory.push({ role: "user", content: userText });
-                const completion = await openai.chat.completions.create({ model: "gpt-3.5-turbo", messages: conversationHistory });
-                const gptResponseText = completion.choices[0].message.content;
-                conversationHistory.push({ role: "assistant", content: gptResponseText });
-                if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: 'assistant_response', text: gptResponseText }));
-                const mp3 = await openai.audio.speech.create({ model: "tts-1", voice: "nova", input: gptResponseText, response_format: "mp3" });
-                const audioResponseBuffer = Buffer.from(await mp3.arrayBuffer());
-                if (ws.readyState === ws.OPEN) ws.send(audioResponseBuffer);
-            } catch (error) {
-                console.error('❌ ERRO NO PIPELINE DE IA:', error);
-                if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: 'error', text: 'Desculpe, ocorreu um erro no servidor.' }));
-            }
-        };
-
-        ws.on('message', (data) => {
-            if (typeof data === 'string' && data === 'EOM') { processAudio(); } 
-            else if (Buffer.isBuffer(data)) { audioBuffers.push(data); }
-        });
-        ws.on('close', () => console.log('❌ Cliente WebSocket desconectado.'));
-        ws.on('error', (error) => console.error('WebSocket Error:', error));
-    });
-
-    server.listen(PORT, () => {
+    app.listen(PORT, () => {
         console.log(`✅ Servidor a rodar na porta ${PORT}`);
     });
 
