@@ -1,44 +1,57 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
+
 model User {
-  id                    Int      @id @default(autoincrement())
-  email                 String   @unique
-  nome                  String?
-  createdAt             DateTime @default(now())
-  progresso             ProgressoAula[]
-  magicLinkToken        String?   @unique
-  magicLinkTokenExpires DateTime?
+  id       String     @id @default(cuid())
+  name     String
+  email    String     @unique
+  progress Progress[]
 }
 
-model Modulo {
-  id          Int     @id @default(autoincrement())
+model MagicLink {
+  id        String   @id @default(cuid())
+  email     String
+  token     String   @unique
+  expiresAt DateTime
+}
+
+model Module {
+  id          String   @id @default(cuid())
   title       String
-  description String
-  aulas       Aula[]
+  lessons     Lesson[]
+  unlocksAt   DateTime
+  courseId    String?
+  description String?
 }
 
-model Aula {
-  id                    Int             @id @default(autoincrement())
-  title                 String
-  contentUrl            String? // <-- CAMPO RENOMEADO PARA O CONTEÚDO
-  modulo                Modulo          @relation(fields: [moduloId], references: [id])
-  moduloId              Int
-  usuariosQueConcluiram ProgressoAula[]
+model Lesson {
+  id        String     @id @default(cuid())
+  title     String
+  videoUrl  String
+  moduleId  String
+  module    Module     @relation(fields: [moduleId], references: [id])
+  completed Progress[]
 }
 
-model ProgressoAula {
-  user        User     @relation(fields: [userId], references: [id])
-  userId      Int
-  aula        Aula     @relation(fields: [aulaId], references: [id])
-  aulaId      Int
-  completedAt DateTime @default(now())
+model Progress {
+  id        String  @id @default(cuid())
+  userId    String
+  lessonId  String
+  user      User    @relation(fields: [userId], references: [id])
+  lesson    Lesson  @relation(fields: [lessonId], references: [id])
 
-  @@id([userId, aulaId])
+  @@unique([userId, lessonId])
 }
