@@ -13,7 +13,6 @@ datasource db {
   url      = "file:./dev.db"
 }
 
-
 model User {
   id         String      @id @default(cuid())
   email      String      @unique
@@ -23,11 +22,12 @@ model User {
 }
 
 model Modulo {
-  id     Int    @id @default(autoincrement())
-  nome   String
-  ordem  Int
-  imagem String
-  aulas  Aula[]
+  id          Int      @id @default(autoincrement())
+  nome        String
+  description String
+  ordem       Int
+  imagem      String
+  aulas       Aula[]
 }
 
 model Aula {
@@ -52,16 +52,12 @@ model Progresso {
   @@unique([userId, aulaId])
 }
 
-
 model MagicLink {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
   email     String
   token     String   @unique
   expiresAt DateTime
-  
-  // --- A CORREÇÃO ESTÁ AQUI ---
-  // Adiciona a relação de volta ao modelo User
   user      User     @relation(fields: [userId], references: [id])
   userId    String
 }
