@@ -1,241 +1,230 @@
-const express = require('express');
-const { PrismaClient } = require('@prisma/client');
-const cors = require('cors');
-const nodemailer = require('nodemailer');
-const { exec } = require('child_process');
-const crypto = require('crypto');
-const path = require('path');
-const multer = require('multer'); // Adicionado para upload de arquivos
-const OpenAI = require('openai');
+import express from 'express';
+import { PrismaClient } from '@prisma/client';
+import cors from 'cors';
+import jwt from 'jsonwebtoken';
+
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const execAsync = promisify(exec);
 
 const prisma = new PrismaClient();
 const app = express();
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+const PORT = 3001;
+const JWT_SECRET = 'seu-segredo-super-secreto'; // Troque por uma chave segura em produção
 
-app.use(cors());
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(cors());
 
-// Adicionado: Linha para servir arquivos estáticos da pasta 'uploads'
-// Isso é essencial para que as fotos possam ser vistas no frontend
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// Middleware para verificar o token JWT
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
 
-const transporter = nodemailer.createTransport({
-  host: "smtp.hostinger.com",
-  port: 465,
-  secure: true,
-  auth: {
-    user: "contato@terapeutacelebrante.com.br",
-    pass: "Empreender@2024",
-  },
-});
+  if (token == null) return res.sendStatus(401); // Se não há token, não autorizado
 
-// Adicionado: Configuração do Multer para o upload da foto da carteirinha
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, 'uploads/'); // Garante que os arquivos sejam salvos na pasta 'uploads'
-  },
-  filename: function (req, file, cb) {
-    // Cria um nome de arquivo único para evitar conflitos
-    cb(null, `${file.fieldname}-${Date.now()}${path.extname(file.originalname)}`);
-  }
-});
-const upload = multer({ storage: storage });
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) return res.sendStatus(403); // Se o token não for válido, proibido
+    req.user = user;
+    next();
+  });
+};
 
 
-// SUAS ROTAS EXISTENTES (NÃO FORAM MODIFICADAS)
-app.post('/auth/magic-link', async (req, res) => {
-  const { email, name } = req.body;
-  const token = crypto.randomBytes(32).toString('hex');
-  const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutos
-
+// Rota para obter todos os módulos e suas aulas
+app.get('/modulos', authenticateToken, async (req, res) => {
   try {
-    let user = await prisma.user.findUnique({ where: { email } });
-    if (!user && name) {
-      user = await prisma.user.create({ data: { email, name } });
-    } else if (!user && !name) {
-      return res.status(400).send('Usuário não encontrado. Por favor, forneça um nome para se cadastrar.');
-    }
-
-    await prisma.magicLink.create({
-      data: { email, token, expiresAt },
-    });
-
-    const magicLink = `${process.env.NEXT_PUBLIC_URL}/auth/callback?token=${token}`;
-    await transporter.sendMail({
-      from: '"Terapeuta Celebrante" <contato@terapeutacelebrante.com.br>',
-      to: email,
-      subject: 'Seu Link de Acesso Mágico',
-      html: `<p>Olá ${user.name},</p><p>Clique no link a seguir para fazer login:</p><a href="${magicLink}">Acessar Plataforma</a>`,
-    });
-
-    res.status(200).send('Link de acesso enviado para seu e-mail.');
-  } catch (error) {
-    console.error(error);
-    res.status(500).send('Erro ao processar solicitação.');
-  }
-});
-
-app.get('/auth/callback', async (req, res) => {
-  const { token } = req.query;
-  try {
-    const link = await prisma.magicLink.findUnique({
-      where: { token, expiresAt: { gt: new Date() } },
-    });
-
-    if (link) {
-      const user = await prisma.user.findUnique({ where: { email: link.email } });
-      await prisma.magicLink.delete({ where: { token } });
-      res.json({ user });
-    } else {
-      res.status(400).send('Link inválido ou expirado.');
-    }
-  } catch (error) {
-    res.status(500).send('Erro de servidor.');
-  }
-});
-
-app.get('/user-progress', async (req, res) => {
-    const { userId } = req.query;
-
-    if (!userId) {
-        return res.status(400).json({ error: 'User ID is required' });
-    }
-
-    try {
-        const progress = await prisma.progress.findMany({
-            where: { userId: String(userId) },
-            select: { lessonId: true }
-        });
-        res.json(progress.map(p => p.lessonId));
-    } catch (error) {
-        console.error('Failed to fetch user progress:', error);
-        res.status(500).json({ error: 'Internal server error' });
-    }
-});
-
-app.get('/modules', async (req, res) => {
-    try {
-        const modules = await prisma.module.findMany({
-            include: {
-                lessons: true,
-            },
-        });
-        res.json(modules);
-    } catch (error) {
-        res.status(500).json({ error: 'Failed to fetch modules' });
-    }
-});
-
-app.get('/lessons/:lessonId', async (req, res) => {
-    const { lessonId } = req.params;
-    try {
-        const lesson = await prisma.lesson.findUnique({
-            where: { id: lessonId },
-            include: { module: true },
-        });
-        if (lesson) {
-            res.json(lesson);
-        } else {
-            res.status(404).json({ error: 'Lesson not found' });
-        }
-    } catch (error) {
-        res.status(500).json({ error: 'Failed to fetch lesson' });
-    }
-});
-
-app.post('/webhooks/process', async (req, res) => {
-    const { event, data } = req.body;
-
-    switch (event) {
-        case 'purchase.approved':
-            await prisma.user.upsert({
-                where: { email: data.customer.email },
-                update: { name: data.customer.name },
-                create: { email: data.customer.email, name: data.customer.name },
-            });
-            break;
-        case 'purchase.refunded':
-            await prisma.user.delete({
-                where: { email: data.customer.email },
-            });
-            break;
-    }
-
-    res.status(200).send('Webhook processed');
-});
-
-app.post('/generate-certificate', (req, res) => {
-    const { name } = req.body;
-    const command = `python gerador_certificado/script.py "${name}"`;
-
-    exec(command, (error, stdout, stderr) => {
-        if (error) {
-            console.error(`exec error: ${error}`);
-            return res.status(500).send('Failed to generate certificate');
-        }
-        res.download('Certificado.pdf');
-    });
-});
-
-app.post('/api/chat/proxy', async (req, res) => {
-  try {
-    const { messages } = req.body;
-    const response = await openai.chat.completions.create({
-      model: "gpt-4-turbo-2024-04-09",
-      messages,
-    });
-    res.json(response.choices[0].message);
-  } catch (error) {
-    console.error('Error proxying chat to OpenAI:', error);
-    res.status(500).json({ error: 'Failed to get response from AI' });
-  }
-});
-
-
-// ---> INÍCIO DA NOVA ROTA PARA CARTEIRINHA <---
-app.post('/api/request-abrath-card', upload.single('photo'), async (req, res) => {
-  const { userId, address, shippingMethod } = req.body;
-
-  // Verifica se o arquivo foi enviado
-  if (!req.file) {
-    return res.status(400).json({ error: 'A foto é obrigatória.' });
-  }
-
-  // Gera a URL completa para acessar a foto
-  const photoUrl = `${process.env.NEXT_PUBLIC_URL_BACKEND}/uploads/${req.file.filename}`;
-
-  if (!userId || !address || !shippingMethod) {
-    return res.status(400).json({ error: 'Todos os campos são obrigatórios.' });
-  }
-
-  try {
-    const userExists = await prisma.user.findUnique({ where: { id: userId } });
-    if (!userExists) {
-      return res.status(404).json({ error: 'Usuário não encontrado.' });
-    }
-
-    const newRequest = await prisma.abrathCardRequest.create({
-      data: {
-        userId,
-        address,
-        shippingMethod,
-        photoUrl,
+    const modulos = await prisma.modulo.findMany({
+      include: {
+        aulas: {
+          orderBy: {
+            ordem: 'asc',
+          },
+        },
+      },
+      orderBy: {
+        ordem: 'asc',
       },
     });
-    console.log('Solicitação de carteirinha recebida:', newRequest);
-    res.status(201).json(newRequest);
+    res.json(modulos);
   } catch (error) {
-    console.error('Erro ao processar solicitação de carteirinha:', error);
-    res.status(500).json({ error: 'Não foi possível processar a sua solicitação.' });
+    res.status(500).json({ error: 'Erro ao buscar módulos' });
   }
 });
-// ---> FIM DA NOVA ROTA PARA CARTEIRINHA <---
 
 
-const PORT = process.env.PORT || 3001;
+// Rota para obter uma aula específica
+app.get('/aulas/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const aula = await prisma.aula.findUnique({
+      where: { id: parseInt(id) },
+    });
+    if (aula) {
+      res.json(aula);
+    } else {
+      res.status(404).json({ error: 'Aula não encontrada' });
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao buscar aula' });
+  }
+});
+
+
+// Rota para marcar aula como concluída
+app.post('/aulas/concluir', authenticateToken, async (req, res) => {
+  const { aulaId } = req.body;
+  const userId = req.user.id; // O ID do usuário vem do token JWT verificado
+
+  try {
+    // Usando upsert para criar ou atualizar o progresso
+    const progresso = await prisma.progresso.upsert({
+      where: {
+        userId_aulaId: {
+          userId: userId,
+          aulaId: aulaId,
+        },
+      },
+      update: { concluida: true },
+      create: {
+        userId: userId,
+        aulaId: aulaId,
+        concluida: true,
+      },
+    });
+    res.json(progresso);
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao marcar aula como concluída' });
+  }
+});
+
+// Rota para buscar o progresso do usuário
+app.get('/progresso', authenticateToken, async (req, res) => {
+  const userId = req.user.id;
+  try {
+    const progresso = await prisma.progresso.findMany({
+      where: { userId: userId, concluida: true },
+      select: { aulaId: true },
+    });
+    res.json(progresso.map((p) => p.aulaId));
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao buscar progresso' });
+  }
+});
+
+
+// Rota para solicitar o link mágico
+app.post('/auth/magic-link', async (req, res) => {
+  const { email, name } = req.body;
+  try {
+    // Encontra ou cria um usuário com o e-mail fornecido
+    const user = await prisma.user.upsert({
+      where: { email },
+      update: {},
+      create: { email, name }, // 'name' é necessário para a criação
+    });
+
+    // Cria um token de link mágico para o usuário
+    const magicLink = await prisma.magicLink.create({
+      data: {
+        userId: user.id,
+        token: `${Math.random()}`, // Em um app real, use um token mais seguro
+        email: email, // <-- CORREÇÃO 1: Adicionada esta linha
+        expiresAt: new Date(Date.now() + 15 * 60 * 1000), // <-- CORREÇÃO 2: Adicionada esta linha (expira em 15 minutos)
+      },
+    });
+
+    // Adicionado para depuração no terminal
+    console.log('TOKEN GERADO:', magicLink.token);
+
+    // Em um app real, você enviaria este link por e-mail
+    // Aqui, apenas logamos no console para fins de desenvolvimento
+    console.log(`Link mágico para ${email}: http://localhost:3000/auth/callback?token=${magicLink.token}`);
+
+    res.status(200).json({ message: 'Link mágico enviado' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Erro ao processar solicitação de link mágico' });
+  }
+});
+
+// Rota para verificar o token do link mágico e fazer login
+app.post('/auth/verify', async (req, res) => {
+  const { token } = req.body;
+  try {
+    // Busca o link mágico pelo token
+    const magicLink = await prisma.magicLink.findUnique({
+      where: { token },
+      include: { user: true }, // Inclui os dados do usuário relacionado
+    });
+
+    // Se o link não existir, retorna erro
+    if (!magicLink) {
+      return res.status(404).json({ error: 'Link mágico não encontrado ou inválido' });
+    }
+    
+    // Agora verificamos usando o campo expiresAt do banco de dados
+    if (new Date() > new Date(magicLink.expiresAt)) {
+        await prisma.magicLink.delete({ where: { token } }); // Apaga o token expirado
+        return res.status(400).json({ error: 'Link mágico expirado' });
+    }
+
+    // Se o link for válido, gera um token JWT para a sessão do usuário
+    const userToken = jwt.sign(
+      { id: magicLink.userId, email: magicLink.user.email },
+      JWT_SECRET,
+      { expiresIn: '7d' } // Token expira em 7 dias
+    );
+
+    // Por segurança, deleta o link mágico após o uso
+    await prisma.magicLink.delete({
+      where: { token },
+    });
+
+    // Retorna o token JWT e o nome do usuário para o cliente
+    res.json({ token: userToken, userName: magicLink.user.name, userId: magicLink.user.id });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Erro ao verificar o link mágico' });
+  }
+});
+
+
+// Rota para gerar certificado
+app.post('/gerar-certificado', authenticateToken, async (req, res) => {
+    const userId = req.user.id;
+  
+    try {
+      // Busca o usuário no banco de dados
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      if (!user) {
+        return res.status(404).json({ error: 'Usuário não encontrado.' });
+      }
+  
+      // Caminho para o script Python
+      const scriptPath = path.join(__dirname, 'gerador_certificado', 'script.py');
+      // Comando para executar o script com o nome do usuário como argumento
+      const command = `python ${scriptPath} "${user.name}"`;
+  
+      // Executa o script
+      await execAsync(command);
+  
+      // Caminho para o certificado gerado
+      const certificadoPath = path.join(__dirname, 'gerador_certificado', 'certificados', `${user.name}.pdf`);
+      // Envia o arquivo PDF como resposta
+      res.sendFile(certificadoPath);
+  
+    } catch (error) {
+      console.error('Erro ao gerar certificado:', error);
+      res.status(500).send('Erro ao gerar o certificado.');
+    }
+});
+
+
 app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+  console.log(`Servidor rodando na porta ${PORT}`);
 });

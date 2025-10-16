@@ -10,48 +10,58 @@ generator client {
 
 datasource db {
   provider = "sqlite"
-  url      = env("DATABASE_URL")
+  url      = "file:./dev.db"
 }
 
 
 model User {
-  id       String     @id @default(cuid())
-  name     String
-  email    String     @unique
-  progress Progress[]
+  id         String      @id @default(cuid())
+  email      String      @unique
+  name       String?
+  progressos Progresso[]
+  magicLinks MagicLink[] // Relação com MagicLink
 }
+
+model Modulo {
+  id     Int    @id @default(autoincrement())
+  nome   String
+  ordem  Int
+  imagem String
+  aulas  Aula[]
+}
+
+model Aula {
+  id         Int         @id @default(autoincrement())
+  nome       String
+  descricao  String
+  videoUrl   String
+  ordem      Int
+  modulo     Modulo      @relation(fields: [moduloId], references: [id])
+  moduloId   Int
+  progressos Progresso[]
+}
+
+model Progresso {
+  id        Int     @id @default(autoincrement())
+  user      User    @relation(fields: [userId], references: [id])
+  userId    String
+  aula      Aula    @relation(fields: [aulaId], references: [id])
+  aulaId    Int
+  concluida Boolean @default(false)
+
+  @@unique([userId, aulaId])
+}
+
 
 model MagicLink {
   id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
   email     String
   token     String   @unique
   expiresAt DateTime
-}
-
-model Module {
-  id          String   @id @default(cuid())
-  title       String
-  lessons     Lesson[]
-  unlocksAt   DateTime
-  courseId    String?
-  description String?
-}
-
-model Lesson {
-  id        String     @id @default(cuid())
-  title     String
-  videoUrl  String
-  moduleId  String
-  module    Module     @relation(fields: [moduleId], references: [id])
-  completed Progress[]
-}
-
-model Progress {
-  id        String  @id @default(cuid())
+  
+  // --- A CORREÇÃO ESTÁ AQUI ---
+  // Adiciona a relação de volta ao modelo User
+  user      User     @relation(fields: [userId], references: [id])
   userId    String
-  lessonId  String
-  user      User    @relation(fields: [userId], references: [id])
-  lesson    Lesson  @relation(fields: [lessonId], references: [id])
-
-  @@unique([userId, lessonId])
 }
