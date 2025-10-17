@@ -18,7 +18,9 @@ const PORT = 3001;
 const JWT_SECRET = 'seu-segredo-super-secreto';
 
 app.use(express.json());
-app.use(cors());
+// --- ESTA É A LINHA CORRIGIDA ---
+app.use(cors({ origin: 'http://localhost:3000' }));
+// --- FIM DA CORREÇÃO ---
 
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -91,8 +93,6 @@ app.get('/aulas/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// --- ESTA É A CORREÇÃO ---
-// Trocamos a lógica de 'upsert' por uma que deleta o progresso se ele já existir.
 app.post('/aulas/concluir', authenticateToken, async (req, res) => {
   const { aulaId } = req.body;
   const userId = req.user.id;
@@ -136,7 +136,6 @@ app.post('/aulas/concluir', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Erro ao marcar/desmarcar aula como concluída' });
   }
 });
-// --- FIM DA CORREÇÃO ---
 
 app.get('/progresso', authenticateToken, async (req, res) => {
   const userId = req.user.id;
@@ -181,7 +180,6 @@ app.get('/progresso-modulos', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Erro ao buscar progresso dos módulos' });
   }
 });
-
 
 app.post('/auth/magic-link', async (req, res) => {
   const { email, name } = req.body;
