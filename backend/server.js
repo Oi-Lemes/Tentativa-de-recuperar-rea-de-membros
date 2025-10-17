@@ -2,7 +2,6 @@ import express from 'express';
 import { PrismaClient } from '@prisma/client';
 import cors from 'cors';
 import jwt from 'jsonwebtoken';
-// --- MUDANÇA 1: Importamos 'execFile' em vez de 'exec' ---
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
@@ -10,8 +9,8 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-// --- MUDANÇA 2: Criamos um execFileAsync ---
 const execFileAsync = promisify(execFile);
+
 
 const prisma = new PrismaClient();
 const app = express();
@@ -32,8 +31,6 @@ const authenticateToken = (req, res, next) => {
     next();
   });
 };
-
-// ... (todas as outras rotas /modulos, /progresso, etc. continuam iguais) ...
 
 app.get('/modulos', authenticateToken, async (req, res) => {
   try {
@@ -94,29 +91,52 @@ app.get('/aulas/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// --- ESTA É A CORREÇÃO ---
+// Trocamos a lógica de 'upsert' por uma que deleta o progresso se ele já existir.
 app.post('/aulas/concluir', authenticateToken, async (req, res) => {
   const { aulaId } = req.body;
   const userId = req.user.id;
+
   try {
-    const progresso = await prisma.progresso.upsert({
+    const progressoExistente = await prisma.progresso.findUnique({
       where: {
         userId_aulaId: {
           userId: userId,
           aulaId: aulaId,
         },
       },
-      update: { concluida: true },
-      create: {
-        userId: userId,
-        aulaId: aulaId,
-        concluida: true,
-      },
     });
-    res.json(progresso);
+
+    if (progressoExistente) {
+      // Se já existe, o usuário está desmarcando a aula. Então, deletamos o registro.
+      await prisma.progresso.delete({
+        where: {
+          userId_aulaId: {
+            userId: userId,
+            aulaId: aulaId,
+          },
+        },
+      });
+      // Retornamos uma mensagem para o frontend saber que a operação foi de desmarcar
+      res.json({ status: 'desmarcada' });
+    } else {
+      // Se não existe, o usuário está marcando a aula. Então, criamos o registro.
+      const novoProgresso = await prisma.progresso.create({
+        data: {
+          userId: userId,
+          aulaId: aulaId,
+          concluida: true,
+        },
+      });
+      // Retornamos o novo progresso para o frontend saber que a operação foi de marcar
+      res.json({ status: 'marcada', progresso: novoProgresso });
+    }
   } catch (error) {
-    res.status(500).json({ error: 'Erro ao marcar aula como concluída' });
+    console.error("Erro ao alternar progresso da aula:", error);
+    res.status(500).json({ error: 'Erro ao marcar/desmarcar aula como concluída' });
   }
 });
+// --- FIM DA CORREÇÃO ---
 
 app.get('/progresso', authenticateToken, async (req, res) => {
   const userId = req.user.id;
@@ -219,63 +239,37 @@ app.post('/auth/verify', async (req, res) => {
   }
 });
 
-
-// --- MUDANÇA 3: Rota /gerar-certificado agora usa execFileAsync ---
 app.post('/gerar-certificado', authenticateToken, async (req, res) => {
-    const userId = req.user.id;
-    try {
+  const userId = req.user.id;
+  const { safeStudentName } = req.body; 
+
+  try {
       const user = await prisma.user.findUnique({ where: { id: userId } });
-      if (!user || !user.name) {
-        return res.status(404).json({ error: 'Usuário não encontrado ou sem nome.' });
+      if (!user) {
+          return res.status(404).json({ error: 'Usuário não encontrado.' });
       }
 
-      const student_name = user.name;
-      const course_name = "Formação Herbalista Pro";
-      const completion_date = new Date().toLocaleDateString('pt-BR', {
-        day: '2-digit',
-        month: 'long',
-        year: 'numeric',
-      });
+      const certificadoDir = path.join(__dirname, 'gerador_certificado', 'certificados');
+      const certificadoPath = path.join(certificadoDir, `${safeStudentName}.pdf`);
 
       const scriptPath = path.join(__dirname, 'gerador_certificado', 'script.py');
-      
-      const dados_imagem = { 
-        background_image_url: `file:///${path.join(__dirname, 'gerador_certificado', 'img', 'ervas.webp').replace(/\\/g, '/')}` 
-      };
-      
-      const dadosBase64 = Buffer.from(JSON.stringify(dados_imagem))
-                                .toString('base64');
-      
-      
-      // ****** CORREÇÃO 1 ******
-      // Definimos o nome e o caminho do arquivo ANTES de chamar o Python
-      const safeStudentName = student_name.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_');
-      const certificadoPath = path.join(__dirname, 'gerador_certificado', 'certificados', `${safeStudentName}.pdf`);
-
-
-      // ****** CORREÇÃO 2 ******
-      // Adicionamos o 'certificadoPath' como o último argumento
       const args = [
-        scriptPath,
-        student_name,
-        course_name,
-        completion_date,
-        dadosBase64,
-        certificadoPath // <-- O Python vai usar isto para salvar o arquivo
+          scriptPath,
+          user.name || 'Nome do Aluno',
+          'Formação Herbalista Pro',
+          new Date().toLocaleDateString('pt-BR'),
+          `file:///${path.join(__dirname, 'gerador_certificado', 'img', 'ervas.webp').replace(/\\/g, '/')}`,
+          certificadoPath
       ];
 
-      // Chamamos o execFileAsync. Ele vai rodar, salvar o arquivo, e terminar (sem stdout gigante)
       await execFileAsync('python', args);
-
-      // Agora o 'res.sendFile' funciona, pois o Python criou o arquivo no local esperado.
       res.sendFile(certificadoPath);
 
-    } catch (error) {
+  } catch (error) {
       console.error('Erro ao gerar certificado:', error);
       res.status(500).send('Erro ao gerar o certificado.');
-    }
+  }
 });
-
 
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);

@@ -1,140 +1,154 @@
-// frontend/src/app/(admin)/modulo/[id]/page.tsx
-
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 
-// Tipos
+// Tipos...
 interface Aula {
   id: number;
-  title: string;
+  nome: string;
 }
+
 interface Modulo {
   id: number;
-  title: string;
+  nome: string;
   description: string;
-  aulas?: Aula[];
+  aulas: Aula[];
 }
 
 export default function ModuloPage() {
   const params = useParams();
-  const { id } = params;
   const router = useRouter();
+  const { id } = params;
 
   const [modulo, setModulo] = useState<Modulo | null>(null);
   const [aulasConcluidas, setAulasConcluidas] = useState<number[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!id) return;
-    
     const fetchData = async () => {
-      setIsLoading(true);
+      setLoading(true);
       setError(null);
       const token = localStorage.getItem('token');
       if (!token) {
         router.push('/');
         return;
-      };
-
+      }
       try {
         const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
         const [moduloRes, progressoRes] = await Promise.all([
-          fetch(`${backendUrl}/modulos/${id}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          }),
-          fetch(`${backendUrl}/progresso`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          })
+          fetch(`${backendUrl}/modulos/${id}`, { headers: { 'Authorization': `Bearer ${token}` }, cache: 'no-store' }),
+          fetch(`${backendUrl}/progresso`, { headers: { 'Authorization': `Bearer ${token}` }, cache: 'no-store' })
         ]);
 
         if (!moduloRes.ok) {
-          throw new Error("Módulo não encontrado ou falha na rede.");
+          const errorData = await moduloRes.json();
+          throw new Error(errorData.message || 'Falha ao carregar o módulo.');
         }
 
         setModulo(await moduloRes.json());
         setAulasConcluidas(await progressoRes.json());
-
       } catch (err: any) {
-        console.error("Erro ao buscar dados do módulo:", err);
         setError(err.message);
       } finally {
-        setIsLoading(false);
+        setLoading(false);
       }
     };
-    fetchData();
+
+    if (id) {
+      fetchData();
+    }
   }, [id, router]);
-  
-  if (isLoading) {
-    return <div className="text-center text-white">A carregar...</div>;
+
+  // useEffect para atualizar o progresso quando uma aula é concluída
+  useEffect(() => {
+    const handleStorageChange = () => {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      const fetchProgresso = async () => {
+        try {
+          const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+          const progressoRes = await fetch(`${backendUrl}/progresso`, { headers: { 'Authorization': `Bearer ${token}` }, cache: 'no-store' });
+          if(progressoRes.ok) {
+            setAulasConcluidas(await progressoRes.json());
+          }
+        } catch (error) {
+          console.error("Erro ao re-buscar progresso:", error);
+        }
+      };
+      fetchProgresso();
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, []);
+
+
+  if (loading) {
+    return <div className="flex justify-center items-center h-screen"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div></div>;
   }
 
   if (error || !modulo) {
     return (
-        <div className="text-center">
-            <h1 className="text-3xl font-bold text-red-400">Ocorreu um Erro</h1>
-            <p className="mt-2 text-white">{error || "Não foi possível carregar o módulo."}</p>
-            <Link href="/dashboard" className="text-blue-400 hover:underline mt-4 block">
-              Voltar para o Dashboard
-            </Link>
-        </div>
+      <div className="text-center p-4">
+        <h1 className="text-2xl md:text-3xl font-bold text-red-400">Ocorreu um Erro</h1>
+        <p className="mt-2 text-white">{error || "Não foi possível carregar as informações do módulo."}</p>
+        <Link href="/dashboard" className="text-blue-400 hover:underline mt-4 block">
+          Voltar para o Dashboard
+        </Link>
+      </div>
     );
   }
 
-  const temAulas = modulo.aulas && modulo.aulas.length > 0;
-
   return (
     <div className="w-full max-w-4xl">
-      <nav className="mb-8 mt-12 md:mt-0">
-        <Link href="/dashboard" className="text-blue-400 hover:underline flex items-center gap-2">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-            <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
-          </svg>
-          Voltar para todos os módulos
+      <nav className="mb-4 md:mb-6 mt-12 md:mt-0">
+        <Link href="/dashboard" className="text-blue-400 hover:underline text-sm md:text-base">
+          &larr; Voltar para todos os módulos
         </Link>
       </nav>
-
-      <header className="mb-8">
-        <h1 className="text-4xl font-bold mb-2">{modulo.title}</h1>
-        <p className="text-lg text-gray-400">{modulo.description}</p>
-      </header>
       <main>
-        {temAulas ? (
-          <>
-            <h2 className="text-2xl font-semibold mb-4">Aulas do Módulo</h2>
-            <div className="flex flex-col space-y-4">
-                {modulo.aulas!.map((aula, index) => {
-                  const isConcluida = aulasConcluidas.includes(aula.id);
-                  return (
-                    <Link 
-                      key={aula.id} 
-                      href={`/modulo/${modulo.id}/aula/${aula.id}`}
-                      className="bg-gray-800 p-4 rounded-lg flex items-center justify-between hover:bg-gray-700 transition-colors"
-                    >
-                        <div className="flex items-center">
-                            <span className={`text-lg mr-4 font-bold ${isConcluida ? 'text-green-500' : 'text-gray-500'}`}>
-                              {isConcluida ? '✓' : index + 1}
-                            </span>
-                            <h3 className={`text-lg ${isConcluida ? 'text-gray-400 line-through' : 'text-white'}`}>
-                              {aula.title}
-                            </h3>
-                        </div>
-                        <span className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-bold">
-                            Assistir
-                        </span>
-                    </Link>
-                  );
-                })}
-            </div>
-          </>
-        ) : (
-          <div className="text-center text-gray-400 mt-10">
-            <p>Este módulo não possui aulas.</p>
-          </div>
-        )}
+        <header className="mb-6">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold">{modulo.nome}</h1>
+          <p className="text-gray-400 mt-2">{modulo.description}</p>
+        </header>
+
+        {/* --- ESTA É A CORREÇÃO VISUAL --- */}
+        <div className="space-y-3">
+          {modulo.aulas.map(aula => {
+            const isConcluida = aulasConcluidas.includes(aula.id);
+            return (
+              <Link
+                key={aula.id}
+                href={`/modulo/${id}/aula/${aula.id}`}
+                className="flex items-center justify-between p-4 bg-gray-800 rounded-lg hover:bg-gray-700 transition-colors"
+              >
+                <div className="flex items-center">
+                  {/* Ícone de Play só aparece se a aula NÃO estiver concluída */}
+                  {!isConcluida && (
+                    <div className="w-8 h-8 flex items-center justify-center mr-4 text-gray-400">
+                      ▶
+                    </div>
+                  )}
+                  {/* O nome da aula ganha o efeito de riscado se estiver concluída */}
+                  <span className={`font-medium ${isConcluida ? 'line-through text-gray-500' : 'text-white'}`}>
+                    {aula.nome}
+                  </span>
+                </div>
+                <span className={`text-sm ${isConcluida ? 'text-green-400' : 'text-gray-400'}`}>
+                  {isConcluida ? 'Concluída' : 'Assistir'}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+        {/* --- FIM DA CORREÇÃO VISUAL --- */}
+        
       </main>
     </div>
   );
