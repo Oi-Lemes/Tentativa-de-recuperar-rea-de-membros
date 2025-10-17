@@ -243,29 +243,31 @@ app.post('/gerar-certificado', authenticateToken, async (req, res) => {
         background_image_url: `file:///${path.join(__dirname, 'gerador_certificado', 'img', 'ervas.webp').replace(/\\/g, '/')}` 
       };
       
-      // Corrigindo o bug do Windows: removemos o padding que o shell "come"
       const dadosBase64 = Buffer.from(JSON.stringify(dados_imagem))
-                                .toString('base64')
-                                .replace(/=/g, ''); // <-- O Python (linha 40) vai adicionar de volta
-
+                                .toString('base64');
       
-      // Criamos o array de argumentos que será passado diretamente ao Python
-      // Isso impede que "Aluno Teste" seja quebrado em dois.
+      
+      // ****** CORREÇÃO 1 ******
+      // Definimos o nome e o caminho do arquivo ANTES de chamar o Python
+      const safeStudentName = student_name.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_');
+      const certificadoPath = path.join(__dirname, 'gerador_certificado', 'certificados', `${safeStudentName}.pdf`);
+
+
+      // ****** CORREÇÃO 2 ******
+      // Adicionamos o 'certificadoPath' como o último argumento
       const args = [
         scriptPath,
         student_name,
         course_name,
         completion_date,
-        dadosBase64 // O 4º argumento que o script espera em sys.argv[4]
+        dadosBase64,
+        certificadoPath // <-- O Python vai usar isto para salvar o arquivo
       ];
 
-      // Chamamos o execFileAsync, que não usa o shell para *interpretar* os argumentos
+      // Chamamos o execFileAsync. Ele vai rodar, salvar o arquivo, e terminar (sem stdout gigante)
       await execFileAsync('python', args);
 
-      // O resto do código permanece o mesmo
-      const safeStudentName = student_name.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_');
-      const certificadoPath = path.join(__dirname, 'gerador_certificado', 'certificados', `${safeStudentName}.pdf`);
-      
+      // Agora o 'res.sendFile' funciona, pois o Python criou o arquivo no local esperado.
       res.sendFile(certificadoPath);
 
     } catch (error) {
