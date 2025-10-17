@@ -2,14 +2,16 @@ import express from 'express';
 import { PrismaClient } from '@prisma/client';
 import cors from 'cors';
 import jwt from 'jsonwebtoken';
-import { exec } from 'child_process';
+// --- MUDANÇA 1: Importamos 'execFile' em vez de 'exec' ---
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const execAsync = promisify(exec);
+// --- MUDANÇA 2: Criamos um execFileAsync ---
+const execFileAsync = promisify(execFile);
 
 const prisma = new PrismaClient();
 const app = express();
@@ -30,6 +32,8 @@ const authenticateToken = (req, res, next) => {
     next();
   });
 };
+
+// ... (todas as outras rotas /modulos, /progresso, etc. continuam iguais) ...
 
 app.get('/modulos', authenticateToken, async (req, res) => {
   try {
@@ -127,47 +131,36 @@ app.get('/progresso', authenticateToken, async (req, res) => {
   }
 });
 
-// --- ROTA ADICIONADA (O "X" DA QUESTÃO) ---
-// Esta rota calcula a porcentagem de conclusão de CADA módulo
 app.get('/progresso-modulos', authenticateToken, async (req, res) => {
   const userId = req.user.id;
   try {
-    // 1. Pega todos os módulos e as aulas de cada um
     const modulos = await prisma.modulo.findMany({
       include: { aulas: { select: { id: true } } },
     });
     
-    // 2. Pega todas as aulas que o usuário já concluiu
-    const progressoAulas = await prisma.progresso.findMany({ // Corrigido de ProgressoAula
+    const progressoAulas = await prisma.progresso.findMany({
       where: { userId: userId, concluida: true },
       select: { aulaId: true },
     });
     
-    // 3. Cria um conjunto (Set) para busca rápida
     const aulasConcluidasIds = new Set(progressoAulas.map(p => p.aulaId));
     
-    // 4. Calcula a porcentagem para cada módulo
     const progressoModulos = {};
     modulos.forEach(modulo => {
-      // Se o módulo não tem aulas (Ex: Certificado), considera 100%
       if (modulo.aulas.length === 0) {
         progressoModulos[modulo.id] = 100;
         return;
       }
-      // Conta quantas aulas do módulo estão no conjunto de aulas concluídas
       const aulasConcluidasNoModulo = modulo.aulas.filter(aula => aulasConcluidasIds.has(aula.id)).length;
-      // Calcula a porcentagem
-      progressoModulos[modulo.id] = (aulasConcluidasNoModulo / modulo.aulas.length) * 100;
+      progressoModulos[modulo.id] = Math.round((aulasConcluidasNoModulo / modulo.aulas.length) * 100);
     });
     
-    // 5. Retorna o objeto (Ex: { "1": 0, "2": 0, "3": 0 })
     res.json(progressoModulos);
   } catch (error) {
     console.error('Erro ao buscar progresso dos módulos:', error);
     res.status(500).json({ error: 'Erro ao buscar progresso dos módulos' });
   }
 });
-// --- FIM DA ROTA ADICIONADA ---
 
 
 app.post('/auth/magic-link', async (req, res) => {
@@ -226,23 +219,61 @@ app.post('/auth/verify', async (req, res) => {
   }
 });
 
+
+// --- MUDANÇA 3: Rota /gerar-certificado agora usa execFileAsync ---
 app.post('/gerar-certificado', authenticateToken, async (req, res) => {
     const userId = req.user.id;
     try {
       const user = await prisma.user.findUnique({ where: { id: userId } });
-      if (!user) {
-        return res.status(404).json({ error: 'Usuário não encontrado.' });
+      if (!user || !user.name) {
+        return res.status(404).json({ error: 'Usuário não encontrado ou sem nome.' });
       }
+
+      const student_name = user.name;
+      const course_name = "Formação Herbalista Pro";
+      const completion_date = new Date().toLocaleDateString('pt-BR', {
+        day: '2-digit',
+        month: 'long',
+        year: 'numeric',
+      });
+
       const scriptPath = path.join(__dirname, 'gerador_certificado', 'script.py');
-      const command = `python ${scriptPath} "${user.name}"`;
-      await execAsync(command);
-      const certificadoPath = path.join(__dirname, 'gerador_certificado', 'certificados', `${user.name}.pdf`);
+      
+      const dados_imagem = { 
+        background_image_url: `file:///${path.join(__dirname, 'gerador_certificado', 'img', 'ervas.webp').replace(/\\/g, '/')}` 
+      };
+      
+      // Corrigindo o bug do Windows: removemos o padding que o shell "come"
+      const dadosBase64 = Buffer.from(JSON.stringify(dados_imagem))
+                                .toString('base64')
+                                .replace(/=/g, ''); // <-- O Python (linha 40) vai adicionar de volta
+
+      
+      // Criamos o array de argumentos que será passado diretamente ao Python
+      // Isso impede que "Aluno Teste" seja quebrado em dois.
+      const args = [
+        scriptPath,
+        student_name,
+        course_name,
+        completion_date,
+        dadosBase64 // O 4º argumento que o script espera em sys.argv[4]
+      ];
+
+      // Chamamos o execFileAsync, que não usa o shell para *interpretar* os argumentos
+      await execFileAsync('python', args);
+
+      // O resto do código permanece o mesmo
+      const safeStudentName = student_name.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_');
+      const certificadoPath = path.join(__dirname, 'gerador_certificado', 'certificados', `${safeStudentName}.pdf`);
+      
       res.sendFile(certificadoPath);
+
     } catch (error) {
       console.error('Erro ao gerar certificado:', error);
       res.status(500).send('Erro ao gerar o certificado.');
     }
 });
+
 
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);

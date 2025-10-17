@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react'; 
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import ChatbotNina from '@/components/ChatbotNina';
@@ -55,10 +55,48 @@ export default function AdminLayout({
   
   useEffect(() => {
     setIsMounted(true);
-    if (window.innerWidth >= 768) { // Alterado para md (768px)
+    if (window.innerWidth >= 768) { 
       setIsSidebarOpen(true);
     }
   }, []);
+
+  const handleLogout = useCallback(() => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('userName');
+    router.push('/');
+  }, [router]);
+
+  const fetchProgressData = useCallback(async () => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    try {
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+        
+        const [modulosRes, progressoRes] = await Promise.all([
+            fetch(`${backendUrl}/modulos`, { headers: { 'Authorization': `Bearer ${token}` }, cache: 'no-store' }),
+            fetch(`${backendUrl}/progresso`, { headers: { 'Authorization': `Bearer ${token}` }, cache: 'no-store' })
+        ]);
+
+        if (!modulosRes.ok || !progressoRes.ok) {
+            handleLogout(); 
+            return;
+        }
+
+        const modulos = await modulosRes.json();
+        const aulasConcluidasIds = await progressoRes.json();
+
+        // --- CORREÇÃO DE FILTRO (case-insensitive) ---
+        const modulosPrincipais = modulos.filter((m: any) => m.nome && !m.nome.toLowerCase().includes('certificado'));
+        // --- FIM DA CORREÇÃO ---
+        
+        const totalAulas = modulosPrincipais.reduce((acc: number, modulo: any) => acc + modulo.aulas.length, 0);
+
+        setProgressoTotal(totalAulas > 0 ? (aulasConcluidasIds.length / totalAulas) * 100 : 0);
+    } catch (error) {
+        console.error("Erro ao buscar progresso total:", error);
+    }
+  }, [handleLogout]); 
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -74,44 +112,13 @@ export default function AdminLayout({
     const handleStorageChange = () => {
       const updatedName = localStorage.getItem('userName');
       if (updatedName) setUserName(updatedName);
-      fetchProgressData();
+      fetchProgressData(); 
     };
 
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
-  }, [router]);
+  }, [router, fetchProgressData]); 
   
-  const fetchProgressData = async () => {
-    const token = localStorage.getItem('token');
-    if (!token) return;
-
-    try {
-        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
-        const [modulosRes, progressoRes] = await Promise.all([
-            fetch(`${backendUrl}/modulos`, { headers: { 'Authorization': `Bearer ${token}` } }),
-            fetch(`${backendUrl}/progresso`, { headers: { 'Authorization': `Bearer ${token}` } })
-        ]);
-
-        if (!modulosRes.ok || !progressoRes.ok) {
-            handleLogout();
-            return;
-        }
-
-        const modulos = await modulosRes.json();
-        const aulasConcluidasIds = await progressoRes.json();
-        const totalAulas = modulos.reduce((acc: number, modulo: any) => acc + modulo.aulas.length, 0);
-
-        setProgressoTotal(totalAulas > 0 ? (aulasConcluidasIds.length / totalAulas) * 100 : 0);
-    } catch (error) {
-        console.error("Erro ao buscar progresso total:", error);
-    }
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('userName');
-    router.push('/');
-  };
 
   return (
     <div className="flex min-h-screen bg-transparent">
@@ -135,7 +142,7 @@ export default function AdminLayout({
             Início / Módulos
           </Link>
         </nav>
-
+        
         <button onClick={handleLogout} className="mt-auto w-full px-4 py-2 font-bold text-white bg-red-600 rounded-md hover:bg-red-700">
           Sair
         </button>

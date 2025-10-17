@@ -18,7 +18,7 @@ export default function CertificadoPage() {
     }
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/generate-certificate`, {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/gerar-certificado`, { // <--- MUDANÇA AQUI
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

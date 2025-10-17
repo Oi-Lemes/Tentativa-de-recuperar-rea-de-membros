@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+// Importa o 'useCallback'
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 
@@ -44,42 +45,66 @@ const ProgressCircle = ({ percentage }: { percentage: number }) => {
 
 export default function DashboardPage() {
   const [modulos, setModulos] = useState<any[]>([]);
-  const [aulasConcluidas, setAulasConcluidas] = useState<number[]>([]);
+  // Dois states separados para os dois tipos de progresso
+  const [progressoModulos, setProgressoModulos] = useState<{[key: number]: number}>({});
+  const [aulasConcluidasIds, setAulasConcluidasIds] = useState<number[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // 'fetchData' movido para fora e envolvido em 'useCallback'
+  const fetchData = useCallback(async () => {
+    const token = localStorage.getItem('token');
+    if (!token) { setLoading(false); return; }
+    try {
+      setLoading(true); 
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+      
+      const [modulosRes, progressoModulosRes, progressoIdsRes] = await Promise.all([
+        fetch(`${backendUrl}/modulos`, { headers: { 'Authorization': `Bearer ${token}` }, cache: 'no-store' }),
+        fetch(`${backendUrl}/progresso-modulos`, { headers: { 'Authorization': `Bearer ${token}` }, cache: 'no-store' }),
+        fetch(`${backendUrl}/progresso`, { headers: { 'Authorization': `Bearer ${token}` }, cache: 'no-store' })
+      ]);
+      
+      const modulosData = await modulosRes.json();
+      const progressoModulosData = await progressoModulosRes.json();
+      const progressoIdsData = await progressoIdsRes.json();
+
+      setModulos(modulosData);
+      setProgressoModulos(progressoModulosData);
+      setAulasConcluidasIds(progressoIdsData);
+
+    } catch (error) {
+      console.error("Erro ao buscar dados:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, []); 
+
+  // useEffect principal que roda no carregamento da página
   useEffect(() => {
-    const fetchData = async () => {
-      const token = localStorage.getItem('token');
-      if (!token) { setLoading(false); return; }
-      try {
-        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
-        const [modulosRes, progressoRes] = await Promise.all([
-          fetch(`${backendUrl}/modulos`, { headers: { 'Authorization': `Bearer ${token}` } }),
-          fetch(`${backendUrl}/progresso`, { headers: { 'Authorization': `Bearer ${token}` } })
-        ]);
-        const modulosData = await modulosRes.json();
-        const progressoData = await progressoRes.json();
-        setModulos(modulosData);
-        setAulasConcluidas(progressoData);
-      } catch (error) {
-        console.error("Erro ao buscar dados:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchData();
-  }, []);
+  }, [fetchData]);
 
-  const getProgressoModulo = (modulo: any) => {
-    if (!modulo?.aulas?.length) return 0;
-    const aulasDoModuloIds = modulo.aulas.map((a: any) => a.id);
-    const concluidasNesteModulo = aulasDoModuloIds.filter((id: number) => aulasConcluidas.includes(id));
-    return (concluidasNesteModulo.length / aulasDoModuloIds.length) * 100;
-  };
+  // Ouve o evento da página de aula para atualizar o dashboard
+  useEffect(() => {
+    const handleStorageChange = () => {
+      fetchData(); // Re-busca os dados quando uma aula é concluída
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, [fetchData]); 
 
-  const modulosPrincipais = modulos.filter(m => m.nome && !m.nome.includes('Certificado'));
+  // --- CORREÇÃO DE FILTRO (case-insensitive) ---
+  const modulosPrincipais = modulos.filter(m => m.nome && !m.nome.toLowerCase().includes('certificado'));
+  // --- FIM DA CORREÇÃO ---
+  
   const totalAulasPrincipais = modulosPrincipais.reduce((acc, m) => acc + (m.aulas?.length || 0), 0);
-  const totalConcluidasPrincipais = modulosPrincipais.flatMap(m => m.aulas || []).filter((a: any) => aulasConcluidas.includes(a.id)).length;
+  
+  // Usa 'aulasConcluidasIds' (a lista) para o cálculo TOTAL
+  const totalConcluidasPrincipais = modulosPrincipais.flatMap(m => m.aulas || []).filter((a: any) => aulasConcluidasIds.includes(a.id)).length;
   const cursoConcluido = totalAulasPrincipais > 0 && totalConcluidasPrincipais >= totalAulasPrincipais;
 
   const modulosParaExibir = [
@@ -104,26 +129,37 @@ export default function DashboardPage() {
       </div>
       <div className="w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
         {modulosParaExibir.map((modulo, index) => {
-          let progressoAnterior = index > 0 ? getProgressoModulo(modulosParaExibir[index - 1]) : 100;
+          
+          let progressoAnterior = index > 0 ? (progressoModulos[modulosParaExibir[index - 1].id] ?? 0) : 100;
+          
+          // --- CORREÇÃO ---
+          // Agora que o backend envia 100 (e não 99.9...), esta lógica simples funciona.
           let isLocked = index > 0 && progressoAnterior < 100;
+          // --- FIM DA CORREÇÃO ---
+
           let destinationUrl = `/modulo/${modulo.id}`;
           let imageUrl = `/img/md${index + 1}.jpg`;
           let lockMessage = "Conclua o módulo anterior";
 
-          if (modulo.nome.includes('Live')) {
+          // --- CORREÇÃO DE FILTRO (case-insensitive) ---
+          if (modulo.nome.toLowerCase().includes('live')) {
             destinationUrl = '/live';
             imageUrl = '/img/md8.jpg';
             isLocked = !cursoConcluido;
-          } else if (modulo.nome.includes('Whatsapp')) {
+          } else if (modulo.nome.toLowerCase().includes('whatsapp')) {
             destinationUrl = '#';
             imageUrl = '/img/md9.jpg';
             isLocked = true; 
             lockMessage = "Acesso liberado após a live";
-          } else if (modulo.nome.includes('Certificado')) {
+          } else if (modulo.nome.toLowerCase().includes('certificado')) {
             destinationUrl = '/certificado';
             imageUrl = '/img/md7.jpg';
             isLocked = false; 
           }
+          // --- FIM DA CORREÇÃO ---
+
+          // Define o progresso individual usando 'progressoModulos'
+          const progresso = progressoModulos[modulo.id] ?? 0;
 
           return (
             <Link key={modulo.id} href={isLocked ? '#' : destinationUrl} className={`group relative block rounded-lg overflow-hidden transition-all duration-300 transform ${isLocked ? 'cursor-not-allowed filter grayscale' : 'hover:scale-105 hover:shadow-2xl hover:shadow-amber-500/40'}`}>
@@ -133,12 +169,15 @@ export default function DashboardPage() {
               </div>
               <div className="absolute bottom-0 left-0 p-4 md:p-6 text-white w-full">
                 <h3 className="text-xl md:text-2xl font-bold uppercase tracking-wider">{modulo.nome}</h3>
-                <p className={`${modulo.nome.includes('Certificado') ? 'text-amber-300' : 'text-gray-300'} text-sm mt-1`}>
-                  {modulo.nome.includes('Certificado') && '🏆 '}
+                <p className={`${modulo.nome.toLowerCase().includes('certificado') ? 'text-amber-300' : 'text-gray-300'} text-sm mt-1`}>
+                  {modulo.nome.toLowerCase().includes('certificado') && '🏆 '}
                   {modulo.description}
                 </p>
               </div>
-              {(!isLocked && modulo.aulas && modulo.aulas.length > 0) && <ProgressCircle percentage={getProgressoModulo(modulo)} />}
+              
+              {/* Passa a variável 'progresso' para o círculo */}
+              {(!isLocked && modulo.aulas && modulo.aulas.length > 0) && <ProgressCircle percentage={progresso} />}
+              
               {isLocked && (
                 <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center p-4 text-center">
                     <svg className="w-10 h-10 mb-2 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
