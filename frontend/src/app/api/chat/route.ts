@@ -5,8 +5,9 @@ const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
 });
 
-interface Aula { id: number; title: string; }
-interface Modulo { id: number; title: string; description: string; aulas: Aula[]; }
+// CORRIGIDO: Interface para bater com o backend
+interface Aula { id: number; nome: string; }
+interface Modulo { id: number; nome: string; description: string; aulas: Aula[]; }
 
 export async function POST(req: Request) {
     try {
@@ -20,7 +21,8 @@ export async function POST(req: Request) {
                 const modulesResponse = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/modulos`, { headers: { 'Authorization': `Bearer ${token}` } });
                 if (modulesResponse.ok) {
                     const modules: Modulo[] = await modulesResponse.json();
-                    courseContext = "Estrutura do Curso 'Saberes da Floresta':\n" + modules.map(m => `- Módulo "${m.title}": ${m.description}\n` + (m.aulas?.map(a => `  - Aula: "${a.title}"\n`).join('') || '')).join('');
+                    // CORRIGIDO: de m.title para m.nome e a.title para a.nome
+                    courseContext = "Estrutura do Curso 'Saberes da Floresta':\n" + modules.map(m => `- Módulo "${m.nome}": ${m.description}\n` + (m.aulas?.map(a => `  - Aula: "${a.nome}"\n`).join('') || '')).join('');
                 }
             } catch (e) { console.error("Não foi possível buscar o contexto do curso:", e); }
         }

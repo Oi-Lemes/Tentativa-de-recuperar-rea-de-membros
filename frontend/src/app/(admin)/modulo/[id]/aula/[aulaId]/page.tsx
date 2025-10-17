@@ -1,5 +1,4 @@
 // frontend/src/app/(admin)/modulo/[id]/aula/[aulaId]/page.tsx
-
 "use client";
 
 import { useEffect, useState } from 'react';
@@ -9,12 +8,12 @@ import Link from 'next/link';
 // Tipos
 interface Aula {
   id: number;
-  title: string;
-  contentUrl?: string;
+  nome: string;       // <-- CORRIGIDO DE 'title'
+  videoUrl?: string; // <-- CORRIGIDO DE 'contentUrl'
 }
 interface Modulo {
   id: number;
-  title: string;
+  nome: string; // <-- CORRIGIDO DE 'title'
   aulas: Aula[];
 }
 
@@ -47,6 +46,7 @@ export default function AulaPage() {
         
         try {
             const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+            // Busca /modulos/:id (que agora retorna o módulo com as aulas)
             const [moduloRes, progressoRes] = await Promise.all([
                 fetch(`${backendUrl}/modulos/${moduleId}`, { headers: { 'Authorization': `Bearer ${token}` } }),
                 fetch(`${backendUrl}/progresso`, { headers: { 'Authorization': `Bearer ${token}` } })
@@ -88,7 +88,15 @@ export default function AulaPage() {
     if(!token) return;
     try {
         const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
-        await fetch(`${backendUrl}/progresso/aula/${aulaAtual.id}`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
+        // CORRIGIDO: Rota do backend para concluir
+        await fetch(`${backendUrl}/aulas/concluir`, { 
+          method: 'POST', 
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ aulaId: aulaAtual.id }) // Envia o ID da aula no corpo
+        });
         setAulasConcluidas(prev => isConcluida ? prev.filter(id => id !== aulaAtual.id) : [...prev, aulaAtual.id]);
         window.dispatchEvent(new Event('storage'));
     } catch (error) {
@@ -105,7 +113,8 @@ export default function AulaPage() {
     }
   };
   
-  const isVideo = aulaAtual?.contentUrl?.includes('wistia.com');
+  // CORRIGIDO: de 'contentUrl' para 'videoUrl'
+  const isVideo = aulaAtual?.videoUrl?.includes('wistia.com');
 
   if (isLoading) {
     return <div className="flex justify-center items-center h-screen"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div></div>;
@@ -126,22 +135,25 @@ export default function AulaPage() {
   return (
     <div className="w-full max-w-4xl">
       <nav className="mb-4 md:mb-6 mt-12 md:mt-0">
+        {/* CORRIGIDO: de 'modulo.title' para 'modulo.nome' */}
         <Link href={`/modulo/${moduleId}`} className="text-blue-400 hover:underline text-sm md:text-base">
-          &larr; Voltar para as aulas do {modulo.title}
+          &larr; Voltar para as aulas do {modulo.nome}
         </Link>
       </nav>
       <header className="mb-4 md:mb-6">
-        <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold">{aulaAtual.title}</h1>
+         {/* CORRIGIDO: de 'aulaAtual.title' para 'aulaAtual.nome' */}
+        <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold">{aulaAtual.nome}</h1>
       </header>
       <main className="space-y-6">
         
         <div>
-          {aulaAtual.contentUrl ? (
+           {/* CORRIGIDO: de 'aulaAtual.contentUrl' para 'aulaAtual.videoUrl' */}
+          {aulaAtual.videoUrl ? (
               isVideo ? (
                 <div className="w-full aspect-w-16 aspect-h-9 rounded-lg overflow-hidden shadow-lg">
                   <iframe
-                    src={aulaAtual.contentUrl}
-                    title={aulaAtual.title}
+                    src={aulaAtual.videoUrl}
+                    title={aulaAtual.nome} // Corrigido
                     allow="autoplay; fullscreen; picture-in-picture"
                     frameBorder="0"
                     scrolling="no"
@@ -150,8 +162,8 @@ export default function AulaPage() {
                 </div>
               ) : (
                 <iframe
-                  src={aulaAtual.contentUrl}
-                  title={aulaAtual.title}
+                  src={aulaAtual.videoUrl}
+                  title={aulaAtual.nome} // Corrigido
                   frameBorder="0"
                   className="w-full h-[75vh] rounded-lg shadow-lg"
                 ></iframe>
@@ -166,7 +178,8 @@ export default function AulaPage() {
         {isUltimaAulaDoModulo && isConcluida && (
             <div className="bg-green-900/50 border border-green-700 text-green-300 px-4 py-3 rounded-lg text-center">
                 <h3 className="font-bold text-lg">Parabéns!</h3>
-                <p className="text-sm">Você concluiu o {modulo.title}. A redirecionar...</p>
+                 {/* CORRIGIDO: de 'modulo.title' para 'modulo.nome' */}
+                <p className="text-sm">Você concluiu o {modulo.nome}. A redirecionar...</p>
             </div>
         )}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 bg-gray-800 rounded-md">

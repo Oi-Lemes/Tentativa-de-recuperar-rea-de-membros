@@ -51,6 +51,29 @@ app.get('/modulos', authenticateToken, async (req, res) => {
   }
 });
 
+app.get('/modulos/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const modulo = await prisma.modulo.findUnique({
+      where: { id: parseInt(id) },
+      include: {
+        aulas: {
+          orderBy: {
+            ordem: 'asc',
+          },
+        },
+      },
+    });
+    if (modulo) {
+      res.json(modulo);
+    } else {
+      res.status(404).json({ error: 'Módulo não encontrado' });
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao buscar módulo' });
+  }
+});
+
 app.get('/aulas/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
@@ -104,6 +127,49 @@ app.get('/progresso', authenticateToken, async (req, res) => {
   }
 });
 
+// --- ROTA ADICIONADA (O "X" DA QUESTÃO) ---
+// Esta rota calcula a porcentagem de conclusão de CADA módulo
+app.get('/progresso-modulos', authenticateToken, async (req, res) => {
+  const userId = req.user.id;
+  try {
+    // 1. Pega todos os módulos e as aulas de cada um
+    const modulos = await prisma.modulo.findMany({
+      include: { aulas: { select: { id: true } } },
+    });
+    
+    // 2. Pega todas as aulas que o usuário já concluiu
+    const progressoAulas = await prisma.progresso.findMany({ // Corrigido de ProgressoAula
+      where: { userId: userId, concluida: true },
+      select: { aulaId: true },
+    });
+    
+    // 3. Cria um conjunto (Set) para busca rápida
+    const aulasConcluidasIds = new Set(progressoAulas.map(p => p.aulaId));
+    
+    // 4. Calcula a porcentagem para cada módulo
+    const progressoModulos = {};
+    modulos.forEach(modulo => {
+      // Se o módulo não tem aulas (Ex: Certificado), considera 100%
+      if (modulo.aulas.length === 0) {
+        progressoModulos[modulo.id] = 100;
+        return;
+      }
+      // Conta quantas aulas do módulo estão no conjunto de aulas concluídas
+      const aulasConcluidasNoModulo = modulo.aulas.filter(aula => aulasConcluidasIds.has(aula.id)).length;
+      // Calcula a porcentagem
+      progressoModulos[modulo.id] = (aulasConcluidasNoModulo / modulo.aulas.length) * 100;
+    });
+    
+    // 5. Retorna o objeto (Ex: { "1": 0, "2": 0, "3": 0 })
+    res.json(progressoModulos);
+  } catch (error) {
+    console.error('Erro ao buscar progresso dos módulos:', error);
+    res.status(500).json({ error: 'Erro ao buscar progresso dos módulos' });
+  }
+});
+// --- FIM DA ROTA ADICIONADA ---
+
+
 app.post('/auth/magic-link', async (req, res) => {
   const { email, name } = req.body;
   try {
@@ -115,12 +181,17 @@ app.post('/auth/magic-link', async (req, res) => {
     const magicLink = await prisma.magicLink.create({
       data: {
         userId: user.id,
-        token: `${Math.random()}`,
+        token: `${Math.random()}`, 
         email: email,
-        expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+        expiresAt: new Date(Date.now() + 15 * 60 * 1000), 
       },
     });
-    console.log('TOKEN GERADO:', magicLink.token);
+
+    const frontendUrl = 'http://localhost:3000'; 
+    console.log(
+      `\n✨ LINK MÁGICO (clique ou copie no navegador):\n${frontendUrl}/auth/callback?token=${magicLink.token}\n`
+    );
+
     res.status(200).json({ message: 'Link mágico enviado' });
   } catch (error) {
     console.error(error);
@@ -139,8 +210,8 @@ app.post('/auth/verify', async (req, res) => {
       return res.status(404).json({ error: 'Link mágico não encontrado ou inválido' });
     }
     if (new Date() > new Date(magicLink.expiresAt)) {
-        await prisma.magicLink.delete({ where: { token } });
-        return res.status(400).json({ error: 'Link mágico expirado' });
+      await prisma.magicLink.delete({ where: { token } });
+      return res.status(400).json({ error: 'Link mágico expirado' });
     }
     const userToken = jwt.sign(
       { id: magicLink.userId, email: magicLink.user.email },
