@@ -1,13 +1,14 @@
+// backend/prisma/seed.js
 import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 // Dados completos de todos os módulos e aulas do curso (SEU CONTEÚDO ORIGINAL)
 const modulosData = [
     {
-        nome: 'Módulo 1 – Segredos das Plantas Medicinais', // title -> nome
+        nome: 'Módulo 1 – Segredos das Plantas Medicinais',
         description: 'Descubra o poder das ervas, desde a identificação até o cultivo seguro.',
         aulas: [
-            { nome: 'Descobrindo o poder das ervas: identifique e conheça suas propriedades', videoUrl: 'https://descobrindo-o-poder-das--xrh9gpa.gamma.site/' }, // contentUrl -> videoUrl
+            { nome: 'Descobrindo o poder das ervas: identifique e conheça suas propriedades', videoUrl: 'https://descobrindo-o-poder-das--xrh9gpa.gamma.site/' },
             { nome: 'Cultive e preserve suas próprias plantas medicinais em casa', videoUrl: 'https://seu-jardim-de-cura--dmq9aik.gamma.site/' },
             { nome: 'Ervas em chás fitoterápicos', videoUrl: 'https://fast.wistia.net/embed/iframe/qug4mwlyn6?web_component=true&seo=true' },
         ],
@@ -60,65 +61,59 @@ const modulosData = [
 ];
 
 async function main() {
-    console.log('Iniciando o processo de seeding completo (6 MÓDULOS)...');
+    console.log(`Iniciando o seeding com os dados REAIS do curso (${modulosData.length} módulos)...`);
 
-    // 1. Limpa todas as tabelas relacionadas (FORMATO CORRIGIDO)
-    console.log('Limpando o banco de dados...');
-    await prisma.progresso.deleteMany({}); // Nome da tabela correta
-    await prisma.magicLink.deleteMany({}); // Limpa links mágicos
-    await prisma.aula.deleteMany({});
-    await prisma.modulo.deleteMany({});
-    await prisma.user.deleteMany({ where: { email: 'teste@saberes.com' } }); // Limpa usuário de teste
-    console.log('Banco de dados limpo.');
+    // As linhas de deleteMany continuam comentadas
+    // console.log('Limpando o banco de dados...');
+    // await prisma.progresso.deleteMany({});
+    // await prisma.magicLink.deleteMany({});
+    // await prisma.aula.deleteMany({});
+    // await prisma.modulo.deleteMany({});
+    // await prisma.user.deleteMany({});
+    // console.log('Banco de dados limpo.');
 
-    // 2. Cria os módulos e aulas (FORMATO CORRIGIDO)
+    console.log('Criando módulos e aulas...');
     let moduloOrder = 1;
     for (const moduloData of modulosData) {
         let aulaOrder = 1;
-        // Adiciona campos que faltavam (descricao, ordem)
+        // Adiciona os campos 'descricao' e 'ordem' que faltavam nas aulas
         const aulasParaCriar = moduloData.aulas.map(aula => ({
             nome: aula.nome,
-            descricao: `Conteúdo detalhado da aula sobre ${aula.nome}.`, // Descrição placeholder
+            descricao: `Conteúdo da aula ${aula.nome}`, // Descrição placeholder, ajuste se necessário
             videoUrl: aula.videoUrl,
             ordem: aulaOrder++
         }));
 
-        // Adiciona campos que faltavam (ordem, imagem)
+        // Cria o módulo, adicionando 'ordem' e 'imagem'
         await prisma.modulo.create({
             data: {
                 nome: moduloData.nome,
                 description: moduloData.description,
                 ordem: moduloOrder++,
-                imagem: `/img/md${moduloOrder - 2}.jpg`, // Imagem padrão
-                aulas: { 
-                    create: aulasParaCriar 
+                imagem: `/img/md${moduloOrder - 1}.jpg`, // Imagem baseada na ordem
+                aulas: {
+                    create: aulasParaCriar
                 },
             },
         });
         console.log(`> Módulo '${moduloData.nome}' criado.`);
     }
 
-    // 3. Cria o módulo de certificado
+    // Cria o módulo de certificado separadamente
     await prisma.modulo.create({
         data: {
-            nome: 'Emissão de Certificado', // title -> nome
+            nome: 'EMISSÃO DO CERTIFICADO', // Nome usado na lógica do frontend
             description: 'Parabéns! Conclua o curso para emitir seu certificado.',
-            ordem: moduloOrder,
-            imagem: '/img/md7.jpg' // Imagem padrão
+            ordem: moduloOrder, // Garante que seja o último
+            imagem: '/img/md7.jpg' // Imagem específica
         },
     });
     console.log('> Módulo de Emissão de Certificado criado.');
 
-    // 4. Cria o usuário de teste padrão
-    await prisma.user.create({
-        data: {
-            email: 'teste@saberes.com',
-            name: 'Aluno Teste',
-        }
-    });
-    console.log('> Usuário de teste criado: teste@saberes.com');
+    // Remove a criação do usuário de teste, pois agora usamos webhooks
+    // console.log('> Usuário de teste não será criado (sistema de webhooks ativo).');
 
-    console.log('\nSeeding (6 MÓDULOS) foi concluído com sucesso! ✅');
+    console.log(`\nSeeding (${modulosData.length} MÓDULOS) foi concluído com sucesso! ✅`);
 }
 
 main()
