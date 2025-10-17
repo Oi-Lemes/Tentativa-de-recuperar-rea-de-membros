@@ -1,40 +1,30 @@
-import type { Metadata, Viewport } from "next"; // Importa o Viewport
-import { Great_Vibes } from "next/font/google";
-import "./globals.css";
+import './globals.css';
+import { Inter, Great_Vibes } from 'next/font/google';
 
-const greatVibes = Great_Vibes({
-  variable: "--font-great-vibes",
-  weight: "400",
-  subsets: ["latin"],
-  display: 'swap',
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-inter',
 });
 
-export const metadata: Metadata = {
-  title: "Área de Membros",
-  description: "Acesso exclusivo para membros",
-  manifest: "/manifest.json",
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: "black-translucent",
-    title: "Membros",
-  },
-};
+const greatVibes = Great_Vibes({
+  subsets: ['latin'],
+  weight: '400',
+  variable: '--font-great-vibes',
+});
 
-// --- ALTERAÇÃO AQUI: themeColor movido para viewport ---
-export const viewport: Viewport = {
-  themeColor: "#b9d7a1",
+export const metadata = {
+  title: 'Área de Membros',
+  description: 'Acesso exclusivo para membros do curso.',
 };
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
-    <html lang="pt-br">
-      <body
-        className={`${greatVibes.variable} antialiased`}
-      >
+    <html lang="pt-BR" className={`${inter.variable} ${greatVibes.variable}`}>
+      <body>
         {children}
       </body>
     </html>
