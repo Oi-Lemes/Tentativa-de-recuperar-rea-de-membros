@@ -135,8 +135,8 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!isModalOpen) return;
     const interval = setInterval(() => {
-      refetchUser();
-    }, 5000); // A cada 5 segundos, busca os dados mais recentes do utilizador
+      refetchUser(); // A cada 5 segundos, busca os dados mais recentes do utilizador
+    }, 5000);
     return () => clearInterval(interval);
   }, [isModalOpen, refetchUser]);
 
@@ -145,10 +145,12 @@ export default function DashboardPage() {
     
     // Verifica se o acesso para o produto que está a ser comprado foi libertado
     const productWasPurchased = 
-        (productToBuy === 'jsnklaekc4' && user.hasLiveAccess) || // Hash real da Live
-        (productToBuy === 'HASH_DA_NINA' && user.hasNinaAccess) ||
-        (productToBuy === 'HASH_DA_CARTEIRA' && user.hasWalletAccess) ||
-        (productToBuy === 'HASH_DO_PREMIUM' && (user.plan === 'premium' || user.plan === 'ultra'));
+        (productToBuy === 'dig1p' && user.plan === 'premium') ||
+        (productToBuy === 'tjxp0' && user.plan === 'ultra') ||
+        (productToBuy === 'jsnklaekc4' && user.hasLiveAccess) ||
+        (productToBuy === 'e8ahym8wzm' && user.hasNinaAccess) ||
+        (productToBuy === '1d0q7pstai' && user.hasWalletAccess) || // Certificado
+        (productToBuy === 'ffusknrwlr' && user.hasWalletAccess); // Carteira (assumindo que libera o mesmo acesso)
 
     if (productWasPurchased) {
         setIsModalOpen(false);
@@ -201,26 +203,26 @@ export default function DashboardPage() {
           
           const userPlan = user?.plan || 'basic';
 
-          // --- LÓGICA DE BLOQUEIO COM SEUS DADOS REAIS ---
+          // --- 5. LÓGICA DE BLOQUEIO COM OS SEUS HASHES DE OFERTA REAIS ---
           if (indexPrincipal >= 6 && userPlan === 'basic') {
               isPaywalled = true;
               lockMessage = "Faça upgrade para Premium para aceder";
-              purchaseOfferId = 'HASH_DO_PREMIUM'; // Substituir pelo seu hash real
+              purchaseOfferId = 'dig1p'; // Hash da Oferta do Plano Premium
           }
           if (modulo.nome.toLowerCase().includes('certificado')) {
             destinationUrl = '/certificado'; imageUrl = '/img/md7.jpg';
             if (!cursoConcluido) { isLockedByProgress = true; lockMessage = "Conclua todos os módulos para emitir"; } 
-            else if (userPlan === 'basic') {
+            else if (userPlan === 'basic' && !user?.hasWalletAccess) { // Usando hasWalletAccess para o certificado
                 isPaywalled = true; isLockedByProgress = false;
-                lockMessage = "Faça upgrade para Premium para emitir";
-                purchaseOfferId = 'HASH_DO_PREMIUM';
+                lockMessage = "Adquira o certificado para emitir";
+                purchaseOfferId = '1d0q7pstai'; // Hash da Oferta do Certificado
             }
           } else if (modulo.nome.toLowerCase().includes('live')) {
             destinationUrl = '/live'; imageUrl = '/img/md8.jpg';
-            if (!user?.hasLiveAccess && userPlan !== 'ultra') { // Libertado para Ultra ou quem comprou
+            if (!user?.hasLiveAccess && userPlan !== 'ultra') {
                 isPaywalled = true;
                 lockMessage = "Adquira seu acesso a este encontro exclusivo";
-                purchaseOfferId = 'jsnklaekc4'; // <-- SEU HASH REAL DA LIVE AQUI
+                purchaseOfferId = 'jsnklaekc4'; // Hash da Oferta da Live
             }
           } else if (modulo.nome.toLowerCase().includes('whatsapp')) {
             destinationUrl = '#'; imageUrl = '/img/md9.jpg';
@@ -231,7 +233,7 @@ export default function DashboardPage() {
             if (userPlan !== 'ultra' && !user?.hasWalletAccess) {
                 isPaywalled = true;
                 lockMessage = "Exclusivo do plano Ultra ou compre agora";
-                purchaseOfferId = 'HASH_DA_CARTEIRA'; // Substituir pelo seu hash real
+                purchaseOfferId = 'ffusknrwlr'; // Hash da Oferta da Carteira
             }
           }
 
@@ -263,7 +265,7 @@ export default function DashboardPage() {
         })}
       </div>
 
-      {/* --- 5. RENDERIZAR O MODAL E O ECRÃ DE CARREGAMENTO --- */}
+      {/* --- 6. RENDERIZAR O MODAL E O ECRÃ DE CARREGAMENTO --- */}
       {isLoadingPix && <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]"><p className="text-white text-lg">A gerar o seu PIX, aguarde...</p></div>}
       {isModalOpen && pixData && (
         <PixModal 

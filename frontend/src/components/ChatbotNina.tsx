@@ -4,7 +4,8 @@
 import { useState, useRef, useEffect, FormEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
-import { useUser } from '@/contexts/UserContext'; // 1. IMPORTAR o nosso hook de utilizador
+import { useUser } from '@/contexts/UserContext';
+import { PixModal } from '@/components/PixModal'; // 1. IMPORTAR O COMPONENTE DO MODAL
 
 // --- Ícones (Mantidos do seu código original) ---
 const MicrophoneIcon = ({ isRecording }: { isRecording: boolean }) => (
@@ -42,9 +43,8 @@ type Message = {
 };
 
 // --- COMPONENTE PRINCIPAL ---
-export function ChatbotNina() { // Export nomeado
-    // 2. OBTER os dados do utilizador a partir do Contexto
-    const { user, loading: userLoading } = useUser();
+export function ChatbotNina() {
+    const { user, loading: userLoading, refetchUser } = useUser();
 
     // Estados originais do seu componente
     const [isOpen, setIsOpen] = useState(false);
@@ -53,6 +53,12 @@ export function ChatbotNina() { // Export nomeado
     const [isLoading, setIsLoading] = useState(false);
     const [isRecording, setIsRecording] = useState(false);
     
+    // --- 2. NOVOS ESTADOS PARA O MODAL PIX ---
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [pixData, setPixData] = useState<{ qrCodeBase64: string; qrCode: string } | null>(null);
+    const [isLoadingPix, setIsLoadingPix] = useState(false);
+    const [productToBuy, setProductToBuy] = useState('');
+
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
     const chatContainerRef = useRef<HTMLDivElement | null>(null);
@@ -62,17 +68,53 @@ export function ChatbotNina() { // Export nomeado
             chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
         }
     }, [messages, isLoading]);
-
-    // 3. FUNÇÃO DE COMPRA que redireciona para o checkout
-    const handlePurchaseRedirect = (offerId: string) => {
+    
+    // --- 3. NOVA FUNÇÃO PARA ABRIR O MODAL PIX ---
+    const handleOpenPixModal = async (offerHash: string) => {
       if (!user) {
-        alert("Utilizador não encontrado. Por favor, faça login novamente.");
-        return;
+          alert("Utilizador não autenticado. Por favor, recarregue a página.");
+          return;
       }
-      // IMPORTANTE: Substitua pela URL base do seu checkout
-      const checkoutUrl = `https://pagar.meugateway.com/checkout/${offerId}?email=${encodeURIComponent(user.email)}`;
-      window.location.href = checkoutUrl;
+      setIsLoadingPix(true);
+      setProductToBuy(offerHash);
+      const token = localStorage.getItem('token');
+      try {
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+        const response = await fetch(`${backendUrl}/gerar-pix-tribopay`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ offerHash }),
+        });
+        if (!response.ok) throw new Error('Falha ao gerar o PIX a partir do backend.');
+        const data = await response.json();
+        setPixData(data);
+        setIsModalOpen(true);
+      } catch (error) {
+        console.error(error);
+        alert('Não foi possível iniciar o pagamento. Tente novamente mais tarde.');
+      } finally {
+        setIsLoadingPix(false);
+      }
     };
+  
+    // --- 4. NOVO EFEITO PARA VERIFICAR O PAGAMENTO ---
+    useEffect(() => {
+      if (!isModalOpen) return;
+      const interval = setInterval(() => { refetchUser(); }, 5000);
+      return () => clearInterval(interval);
+    }, [isModalOpen, refetchUser]);
+  
+    useEffect(() => {
+      if (!user || !isModalOpen) return;
+      const productWasPurchased = (productToBuy === 'e8ahym8wzm' && user.hasNinaAccess);
+  
+      if (productWasPurchased) {
+          setIsModalOpen(false);
+          setProductToBuy('');
+          alert('Pagamento confirmado! O acesso à Nina foi libertado.');
+          setIsOpen(true); // Reabre o chat para o utilizador
+      }
+    }, [user, isModalOpen, productToBuy]);
 
     // Funções originais do seu componente (playAudio, handleClearChat, etc.)
     const playAudio = (text: string) => {
@@ -173,8 +215,7 @@ export function ChatbotNina() { // Export nomeado
         }
     };
 
-    // 4. LÓGICA DE ACESSO
-    // O acesso é libertado se o plano for 'ultra' OU se o utilizador tiver comprado o acesso avulso
+    // Lógica de Acesso
     const isUnlocked = user?.plan === 'ultra' || user?.hasNinaAccess;
     
     return (
@@ -195,29 +236,20 @@ export function ChatbotNina() { // Export nomeado
                         transition={{ type: 'spring', stiffness: 400, damping: 40 }}
                         className="fixed bottom-0 right-0 h-[75vh] w-full bg-white/80 backdrop-blur-lg dark:bg-gray-800/80 shadow-2xl flex flex-col z-50 md:bottom-20 md:right-4 md:w-96 md:h-[600px] md:rounded-xl border border-gray-200 dark:border-gray-700"
                     >
-                        {/* Header (do seu código original) */}
                         <div className="bg-gray-50 dark:bg-gray-900/70 p-4 flex items-center rounded-t-xl flex-shrink-0 border-b border-gray-200 dark:border-gray-800">
                             <img src="/avatar-nina.png" alt="Nina" className="w-10 h-10 rounded-full mr-3" />
                             <div>
                                 <h3 className="font-bold text-gray-800 dark:text-white">Nina, a sua Herbalista</h3>
-                                <p className="text-xs text-green-500 flex items-center">
-                                    <span className="w-2 h-2 bg-green-500 rounded-full mr-1.5 animate-pulse"></span>
-                                    Online
-                                </p>
+                                <p className="text-xs text-green-500 flex items-center"><span className="w-2 h-2 bg-green-500 rounded-full mr-1.5 animate-pulse"></span>Online</p>
                             </div>
                             <div className="ml-auto flex items-center space-x-2">
-                                <button onClick={handleClearChat} title="Limpar conversa" className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-white transition-colors">
-                                    <ClearIcon />
-                                </button>
+                                <button onClick={handleClearChat} title="Limpar conversa" className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-white transition-colors"><ClearIcon /></button>
                                 <button onClick={() => setIsOpen(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-white text-2xl leading-none">&times;</button>
                             </div>
                         </div>
 
-                        {/* --- LÓGICA CONDICIONAL DE ACESSO --- */}
                         {userLoading ? (
-                            <div className="flex-1 flex items-center justify-center">
-                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-500"></div>
-                            </div>
+                            <div className="flex-1 flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-500"></div></div>
                         ) : isUnlocked ? (
                             <>
                                 {/* Interface do Chat para Utilizadores com Acesso (o seu código original) */}
@@ -235,54 +267,30 @@ export function ChatbotNina() { // Export nomeado
                                     {messages.map((msg) => (
                                         <motion.div key={msg.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
                                             <div className={`max-w-[80%] p-3 rounded-2xl shadow-sm ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-br-none' : 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-bl-none'}`}>
-                                                <div className="prose prose-sm dark:prose-invert max-w-none">
-                                                    <ReactMarkdown>{msg.text}</ReactMarkdown>
-                                                </div>
+                                                <div className="prose prose-sm dark:prose-invert max-w-none"><ReactMarkdown>{msg.text}</ReactMarkdown></div>
                                             </div>
                                             {msg.role === 'assistant' && (
                                                 <div className="mt-1.5 flex items-center space-x-2">
-                                                    <button onClick={() => handleFeedback(msg.id, 'like')} className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full">
-                                                        <ThumbsUpIcon selected={msg.feedback === 'like'} />
-                                                    </button>
-                                                    <button onClick={() => handleFeedback(msg.id, 'dislike')} className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full">
-                                                        <ThumbsDownIcon selected={msg.feedback === 'dislike'} />
-                                                    </button>
+                                                    <button onClick={() => handleFeedback(msg.id, 'like')} className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full"><ThumbsUpIcon selected={msg.feedback === 'like'} /></button>
+                                                    <button onClick={() => handleFeedback(msg.id, 'dislike')} className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full"><ThumbsDownIcon selected={msg.feedback === 'dislike'} /></button>
                                                 </div>
                                             )}
                                         </motion.div>
                                     ))}
                                     {isLoading && (
                                         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex justify-start">
-                                            <div className="p-3 rounded-2xl bg-gray-200 dark:bg-gray-700 rounded-bl-none">
-                                                <div className="flex items-center space-x-2">
-                                                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:-0.3s]"></span>
-                                                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:-0.15s]"></span>
-                                                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></span>
-                                                </div>
-                                            </div>
+                                            <div className="p-3 rounded-2xl bg-gray-200 dark:bg-gray-700 rounded-bl-none"><div className="flex items-center space-x-2"><span className="w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:-0.3s]"></span><span className="w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:-0.15s]"></span><span className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></span></div></div>
                                         </motion.div>
                                     )}
                                 </div>
                                 <form onSubmit={handleSubmit} className="p-3 bg-gray-50 dark:bg-gray-900/70 flex items-center rounded-b-xl border-t border-gray-200 dark:border-gray-800">
-                                    <button type="button" onClick={handleToggleRecording} disabled={isLoading} className="mr-2 p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50 transition-colors">
-                                       <MicrophoneIcon isRecording={isRecording} />
-                                    </button>
-                                    <input
-                                        type="text"
-                                        value={input}
-                                        onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) handleSubmit(e); }}
-                                        onChange={(e) => setInput(e.target.value)}
-                                        placeholder={isRecording ? "A gravar... Fale agora!" : "Digite a sua dúvida..."}
-                                        disabled={isLoading || isRecording}
-                                        className="w-full px-4 py-2 text-gray-800 dark:text-white bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    />
-                                    <button type="submit" disabled={!input.trim() || isLoading || isRecording} className="ml-2 p-2.5 rounded-full bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-300 dark:disabled:bg-gray-500 transition-colors">
-                                       <SendIcon />
-                                    </button>
+                                    <button type="button" onClick={handleToggleRecording} disabled={isLoading} className="mr-2 p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50 transition-colors"><MicrophoneIcon isRecording={isRecording} /></button>
+                                    <input type="text" value={input} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) handleSubmit(e); }} onChange={(e) => setInput(e.target.value)} placeholder={isRecording ? "A gravar... Fale agora!" : "Digite a sua dúvida..."} disabled={isLoading || isRecording} className="w-full px-4 py-2 text-gray-800 dark:text-white bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                                    <button type="submit" disabled={!input.trim() || isLoading || isRecording} className="ml-2 p-2.5 rounded-full bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-300 dark:disabled:bg-gray-500 transition-colors"><SendIcon /></button>
                                 </form>
                             </>
                         ) : (
-                            // Ecrã de Bloqueio para Utilizadores sem Acesso
+                            // Ecrã de Bloqueio com o HASH DE OFERTA REAL
                             <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
                                 <img src="/avatar-nina.png" alt="Nina" className="w-20 h-20 rounded-full mb-4 opacity-80" />
                                 <h4 className="font-bold text-lg text-gray-800 dark:text-white">Acesso Exclusivo à Nina</h4>
@@ -290,7 +298,7 @@ export function ChatbotNina() { // Export nomeado
                                     A assistente herbalista Nina é um recurso premium disponível apenas para assinantes do plano <strong>Ultra</strong> ou através da compra de acesso.
                                 </p>
                                 <button
-                                    onClick={() => handlePurchaseRedirect('ofr_nina_101')} // ID da oferta do Chatbot
+                                    onClick={() => handleOpenPixModal('e8ahym8wzm')} // 5. LIGAR O BOTÃO AO MODAL COM O HASH REAL
                                     className="mt-6 w-full max-w-xs px-4 py-3 font-bold text-white bg-indigo-600 rounded-md hover:bg-indigo-700 transition-colors"
                                 >
                                     Liberar Acesso Agora
@@ -300,6 +308,16 @@ export function ChatbotNina() { // Export nomeado
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            {/* --- 6. RENDERIZAR O MODAL E O ECRÃ DE CARREGAMENTO --- */}
+            {isLoadingPix && <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]"><p className="text-white text-lg">A gerar o seu PIX, aguarde...</p></div>}
+            {isModalOpen && pixData && (
+                <PixModal 
+                    qrCodeBase64={pixData.qrCodeBase64} 
+                    qrCode={pixData.qrCode} 
+                    onClose={() => setIsModalOpen(false)} 
+                />
+            )}
         </>
     );
 }
