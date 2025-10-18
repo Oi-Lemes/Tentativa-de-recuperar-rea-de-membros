@@ -24,7 +24,7 @@ app.use(express.json());
 // --- CONFIGURAÇÃO DE CORS PARA PRODUÇÃO ---
 // Adicione a URL do seu site da Vercel quando a tiver
 app.use(cors({
-  origin: ['http://localhost:3000', 'https://tentativa-de-recuperar-rea-de-membr-.vercel.app']
+  origin: ['http://localhost:3000', 'https://www.saberesdafloresta.site']
 }));
 // --- FIM DA CONFIGURAÇÃO ---
 
