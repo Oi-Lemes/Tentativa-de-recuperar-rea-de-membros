@@ -272,3 +272,46 @@ app.post('/gerar-certificado', authenticateToken, async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
 });
+
+// Adicione esta importação no topo do seu server.js
+import axios from 'axios';
+
+// ROTA PARA GERAR A COBRANÇA PIX COM A TRIBOPAY
+app.post('/gerar-pix-tribopay', authenticateToken, async (req, res) => {
+  const { offerHash } = req.body; // Recebe o Hash da Oferta do frontend
+  const { name, email } = req.user; // Obtemos os dados do utilizador autenticado
+
+  // A URL da API da Tribopay
+  const TRIBOPAY_API_URL = 'https://api.tribopay.com.br/v1/charge/pix/create';
+
+  const payload = {
+    token: process.env.TRIBOPAY_API_TOKEN,
+    offer_hash: offerHash,
+    customer: {
+      name: name,
+      email: email,
+      // Outros dados do cliente podem ser necessários, consulte a documentação da Tribopay
+    }
+  };
+
+  try {
+    console.log('Enviando requisição para a Tribopay com o payload:', payload);
+    const response = await axios.post(TRIBOPAY_API_URL, payload);
+
+    // A API da Tribopay deve devolver os dados do PIX
+    const pixData = response.data;
+
+    if (pixData && pixData.qr_code && pixData.qr_code_text) {
+      res.json({
+        qrCodeBase64: pixData.qr_code,      // QR Code em formato de imagem base64
+        qrCode: pixData.qr_code_text, // O código "Copia e Cola"
+      });
+    } else {
+      throw new Error('A resposta da API da Tribopay não continha os dados do PIX esperados.');
+    }
+
+  } catch (error) {
+    console.error('Erro ao gerar PIX com a Tribopay:', error.response ? error.response.data : error.message);
+    res.status(500).json({ error: 'Não foi possível gerar a cobrança PIX.' });
+  }
+});

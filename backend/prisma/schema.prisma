@@ -1,24 +1,31 @@
-// 1. O provider agora é "postgresql"
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
+// Caminho: backend/prisma/schema.prisma
 
 generator client {
   provider = "prisma-client-js"
 }
 
-// 2. O ID do User agora é um Int (autoincremento)
-// Adicionados campos 'hotmartId' e 'status' como na referência
-model User {
-  id         Int      @id @default(autoincrement())
-  email      String   @unique
-  name       String?
-  hotmartId  String?  @unique
-  status     String?  @default("pending") // Ex: "active", "cancelled"
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
 
-  progressos Progresso[]
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  name      String?
+  hotmartId String?  @unique
+  status    String?  @default("pending")
+
+  // --- CAMPOS CORRIGIDOS E ADICIONADOS ---
+  password  String?
+  plan          String   @default("basic")
+  hasLiveAccess Boolean  @default(false)
+  hasNinaAccess Boolean  @default(false)
+  hasWalletAccess Boolean @default(false)
+
+  // --- RELACIONAMENTOS ---
   magicLinks MagicLink[]
+  progressos Progresso[]
 }
 
 model Modulo {
@@ -31,35 +38,33 @@ model Modulo {
 }
 
 model Aula {
-  id         Int         @id @default(autoincrement())
+  id         Int      @id @default(autoincrement())
   nome       String
   descricao  String
   videoUrl   String
   ordem      Int
-  modulo     Modulo      @relation(fields: [moduloId], references: [id])
   moduloId   Int
+  modulo     Modulo   @relation(fields: [moduloId], references: [id])
   progressos Progresso[]
 }
 
-// 3. O userId agora é um Int para corresponder ao novo ID do User
 model Progresso {
   id        Int     @id @default(autoincrement())
-  user      User    @relation(fields: [userId], references: [id])
   userId    Int
-  aula      Aula    @relation(fields: [aulaId], references: [id])
   aulaId    Int
   concluida Boolean @default(false)
+  aula      Aula    @relation(fields: [aulaId], references: [id])
+  user      User    @relation(fields: [userId], references: [id])
 
   @@unique([userId, aulaId])
 }
 
-// 4. O userId aqui também é um Int
 model MagicLink {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
   email     String
   token     String   @unique
   expiresAt DateTime
-  user      User     @relation(fields: [userId], references: [id])
   userId    Int
+  user      User     @relation(fields: [userId], references: [id])
 }
