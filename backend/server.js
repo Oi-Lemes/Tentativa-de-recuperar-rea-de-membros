@@ -197,15 +197,18 @@ app.post('/login', async (req, res) => {
 });
 
 
-// Rotas de Magic Link (mantidas, caso ainda as use)
+// Em backend/server.js
 app.post('/auth/magic-link', async (req, res) => {
-    const { email, name } = req.body;
+    const { email } = req.body; // Mantém a extração apenas do email
+    console.log('Recebido pedido para /auth/magic-link com o email:', email); // Linha adicionada
     try {
         const user = await prisma.user.upsert({
             where: { email },
             update: {},
-            create: { email, name },
+            // Se o utilizador não existir, cria com email. O nome pode ser adicionado depois.
+            create: { email },
         });
+        // ... resto do código da função
         const magicLink = await prisma.magicLink.create({
             data: {
                 userId: user.id,
