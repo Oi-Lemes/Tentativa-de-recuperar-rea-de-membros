@@ -223,9 +223,22 @@ app.post('/auth/magic-link', async (req, res) => {
                 expiresAt: new Date(Date.now() + 15 * 60 * 1000),
             },
         });
-        const frontendUrl = 'http://localhost:3000';
-        console.log(`\n✨ LINK MÁGICO (clique ou copie no navegador):\n${frontendUrl}/auth/callback?token=${magicLink.token}\n`);
-        res.status(200).json({ message: 'Link mágico enviado' });
+        // ▼▼▼ INSIRA ESTE NOVO BLOCO NO LUGAR ▼▼▼
+// Determina a URL base do frontend dependendo do ambiente
+const frontendUrl = process.env.NODE_ENV === 'production'
+  ? process.env.FRONTEND_URL
+  : 'http://localhost:3000';
+
+// Cria a URL completa do link mágico para ser enviada no e-mail
+const url = `${frontendUrl}/auth/callback?token=${magicLink.token}`;
+
+// Nota: A lógica para enviar um e-mail real para o usuário com a variável "url" deve ser inserida aqui.
+
+// Mantém a exibição do link no console para facilitar os testes em ambiente de desenvolvimento
+console.log(`\n✨ LINK MÁGICO (PARA TESTES):\n${url}\n`);
+
+res.status(200).json({ message: 'Link mágico gerado e pronto para envio.' });
+// ▲▲▲ INSIRA ATÉ AQUI ▲▲▲
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Erro ao processar solicitação de link mágico' });
