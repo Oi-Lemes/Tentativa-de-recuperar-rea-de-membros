@@ -21,10 +21,16 @@ const JWT_SECRET = process.env.JWT_SECRET || 'seu-segredo-super-secreto';
 
 app.use(express.json());
 
-// --- CONFIGURAÇÃO DE CORS PARA PRODUÇÃO ---
-// Adicione a URL do seu site da Vercel quando a tiver
+// COLE ESTE CÓDIGO NO LUGAR DO ANTIGO
+const productionUrl = 'https://www.saberesdafloresta.site';
+const localUrl = 'http://localhost:3000';
+
+// Aceita qualquer URL do seu projeto na Vercel
+const vercelRegex = /https:\/\/tentativa-de-recuperar-rea-de-membros.*\.vercel\.app$/;
+
 app.use(cors({
-  origin: ['http://localhost:3000', 'https://www.saberesdafloresta.site']
+  origin: [productionUrl, localUrl, vercelRegex],
+  optionsSuccessStatus: 200
 }));
 // --- FIM DA CONFIGURAÇÃO ---
 
