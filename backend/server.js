@@ -317,7 +317,7 @@ app.get('/me', authenticateToken, async (req, res) => {
 app.post('/gerar-pix-tribopay', authenticateToken, async (req, res) => {
   const { offerHash } = req.body;
   const { name, email } = req.user;
-  const TRIBOPAY_API_URL = 'https://api.tribopay.com.br/v1/charge/pix/create';
+ const TRIBOPAY_API_URL = 'https://api.tribopay.com.br/api/v1/charge/pix/create';
   const payload = {
     token: process.env.TRIBOPAY_API_TOKEN,
     offer_hash: offerHash,
