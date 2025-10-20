@@ -4,14 +4,13 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ChatbotNina } from '@/components/ChatbotNina'; // Import corrigido
-import { UserProvider, useUser } from '@/contexts/UserContext'; // 1. Importar o Provider e o Hook
+import ChatbotNina from '@/components/ChatbotNina'; // CORREÇÃO APLICADA AQUI
+import { UserProvider, useUser } from '@/contexts/UserContext';
 
 // --- Componente Interno para a Sidebar e Conteúdo ---
-// Esta abordagem organiza o código, garantindo que `useUser` seja chamado dentro do Provider.
 const LayoutWithSidebar = ({ children }: { children: React.ReactNode }) => {
   const router = useRouter();
-  const { user, loading: userLoading } = useUser(); // 2. Obter os dados do utilizador a partir do Contexto
+  const { user, loading: userLoading } = useUser();
 
   const [progressoTotal, setProgressoTotal] = useState(0);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -34,7 +33,7 @@ const LayoutWithSidebar = ({ children }: { children: React.ReactNode }) => {
     if (!token) return;
 
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL;
       const [modulosRes, progressoRes] = await Promise.all([
         fetch(`${backendUrl}/modulos`, { headers: { 'Authorization': `Bearer ${token}` }, cache: 'no-store' }),
         fetch(`${backendUrl}/progresso`, { headers: { 'Authorization': `Bearer ${token}` }, cache: 'no-store' })
@@ -50,7 +49,6 @@ const LayoutWithSidebar = ({ children }: { children: React.ReactNode }) => {
       const modulosPrincipais = modulos.filter((m: any) => m.nome && !m.nome.toLowerCase().includes('certificado'));
       const totalAulas = modulosPrincipais.reduce((acc: number, modulo: any) => acc + (modulo.aulas?.length || 0), 0);
       
-      // Cálculo corrigido para o progresso total
       const aulasPrincipais = modulosPrincipais.flatMap((m: any) => m.aulas || []);
       const totalConcluidas = aulasPrincipais.filter((a: any) => aulasConcluidasIds.includes(a.id)).length;
       
@@ -69,7 +67,6 @@ const LayoutWithSidebar = ({ children }: { children: React.ReactNode }) => {
     }
 
     const handleStorageChange = (event: StorageEvent) => {
-        // Ouve por mudanças no progresso e recarrega
         if(event.key === 'aula_concluida' || event.key === null) {
             fetchProgressData();
         }
@@ -79,7 +76,6 @@ const LayoutWithSidebar = ({ children }: { children: React.ReactNode }) => {
     return () => window.removeEventListener('storage', handleStorageChange);
   }, [router, fetchProgressData]);
 
-  // Círculo de Progresso (do seu código original)
   const ProgressCircle = ({ percentage }: { percentage: number }) => {
     const strokeWidth = 8;
     const radius = 60;
@@ -125,7 +121,6 @@ const LayoutWithSidebar = ({ children }: { children: React.ReactNode }) => {
         <div className={`flex flex-col items-center mb-10 transition-opacity duration-300 ease-in-out ${isMounted ? 'opacity-100' : 'opacity-0'}`}>
           <div className="mb-4 text-center">
             <p className="text-sm text-gray-800">Bem-vindo(a),</p>
-            {/* 3. Usar o nome do utilizador que vem do Contexto */}
             <h2 className="text-xl font-bold text-black truncate w-full">{userLoading ? 'Carregando...' : user?.name || 'Aluno(a)'}</h2>
           </div>
           <ProgressCircle percentage={progressoTotal} />
@@ -162,7 +157,6 @@ const LayoutWithSidebar = ({ children }: { children: React.ReactNode }) => {
 };
 
 // --- Componente Principal do Layout ---
-// Agora a sua única responsabilidade é "envolver" a aplicação com o UserProvider
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
     <UserProvider>

@@ -5,7 +5,15 @@ import { useState, useRef, useEffect, FormEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import { useUser } from '@/contexts/UserContext';
-import { PixModal } from '@/components/PixModal'; // 1. IMPORTAR O COMPONENTE DO MODAL
+import { PixModal } from '@/components/PixModal'; // Corrigido para o novo modal
+
+// --- Interface para os dados do PIX que esperamos do backend ---
+interface PixData {
+  pix_qr_code: string;
+  amount_paid: number;
+  expiration_date: string;
+  hash: string;
+}
 
 // --- Ícones (Mantidos do seu código original) ---
 const MicrophoneIcon = ({ isRecording }: { isRecording: boolean }) => (
@@ -43,21 +51,21 @@ type Message = {
 };
 
 // --- COMPONENTE PRINCIPAL ---
-export function ChatbotNina() {
+export default function ChatbotNina() {
     const { user, loading: userLoading, refetchUser } = useUser();
 
-    // Estados originais do seu componente
+    // Estados originais
     const [isOpen, setIsOpen] = useState(false);
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [isRecording, setIsRecording] = useState(false);
     
-    // --- 2. NOVOS ESTADOS PARA O MODAL PIX ---
+    // --- ESTADOS ATUALIZADOS PARA O MODAL PIX ---
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [pixData, setPixData] = useState<{ qrCodeBase64: string; qrCode: string } | null>(null);
+    const [pixData, setPixData] = useState<PixData | null>(null);
     const [isLoadingPix, setIsLoadingPix] = useState(false);
-    const [productToBuy, setProductToBuy] = useState('');
+    const [paymentError, setPaymentError] = useState('');
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
@@ -69,54 +77,63 @@ export function ChatbotNina() {
         }
     }, [messages, isLoading]);
     
-    // --- 3. NOVA FUNÇÃO PARA ABRIR O MODAL PIX ---
-    const handleOpenPixModal = async (offerHash: string) => {
-      if (!user) {
-          alert("Utilizador não autenticado. Por favor, recarregue a página.");
-          return;
-      }
-      setIsLoadingPix(true);
-      setProductToBuy(offerHash);
-      const token = localStorage.getItem('token');
-      try {
-        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
-        const response = await fetch(`${backendUrl}/gerar-pix-tribopay`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ offerHash }),
-        });
-        if (!response.ok) throw new Error('Falha ao gerar o PIX a partir do backend.');
-        const data = await response.json();
-        setPixData(data);
-        setIsModalOpen(true);
-      } catch (error) {
-        console.error(error);
-        alert('Não foi possível iniciar o pagamento. Tente novamente mais tarde.');
-      } finally {
-        setIsLoadingPix(false);
-      }
-    };
-  
-    // --- 4. NOVO EFEITO PARA VERIFICAR O PAGAMENTO ---
-    useEffect(() => {
-      if (!isModalOpen) return;
-      const interval = setInterval(() => { refetchUser(); }, 5000);
-      return () => clearInterval(interval);
-    }, [isModalOpen, refetchUser]);
-  
-    useEffect(() => {
-      if (!user || !isModalOpen) return;
-      const productWasPurchased = (productToBuy === 'e8ahym8wzm' && user.hasNinaAccess);
-  
-      if (productWasPurchased) {
-          setIsModalOpen(false);
-          setProductToBuy('');
-          alert('Pagamento confirmado! O acesso à Nina foi libertado.');
-          setIsOpen(true); // Reabre o chat para o utilizador
-      }
-    }, [user, isModalOpen, productToBuy]);
+    // --- FUNÇÃO DE PAGAMENTO ATUALIZADA PARA O PARADISE PAGS ---
+    const handlePayment = async () => {
+        if (!user) {
+            alert("Você precisa estar logado para comprar. Por favor, recarregue a página.");
+            return;
+        }
+        setIsLoadingPix(true);
+        setPaymentError('');
+        const token = localStorage.getItem('token');
 
-    // Funções originais do seu componente (playAudio, handleClearChat, etc.)
+        // Informações do produto do seu código PHP
+        const paymentPayload = {
+            productHash: 'prod_0d6f903b6855c714',
+            baseAmount: 2704, // Valor em centavos
+            productTitle: 'Chatbot Nina',
+            checkoutUrl: window.location.href
+        };
+
+        try {
+            const backendUrl = process.env.NEXT_PUBLIC_API_URL;
+            const response = await fetch(`${backendUrl}/gerar-pix-paradise`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify(paymentPayload),
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.error || 'Falha ao gerar o PIX a partir do backend.');
+            }
+            
+            setPixData({
+                pix_qr_code: result.pix.pix_qr_code,
+                amount_paid: result.amount_paid,
+                expiration_date: result.pix.expiration_date,
+                hash: result.hash
+            });
+            setIsModalOpen(true);
+
+        } catch (error) {
+            console.error(error);
+            setPaymentError(error instanceof Error ? error.message : "Ocorreu um erro desconhecido.");
+        } finally {
+            setIsLoadingPix(false);
+        }
+    };
+
+    // --- NOVA FUNÇÃO CHAMADA PELO MODAL QUANDO O PAGAMENTO É APROVADO ---
+    const handlePaymentSuccess = () => {
+        setIsModalOpen(false);
+        refetchUser(); // Atualiza os dados do usuário para refletir o novo acesso
+        alert('Pagamento aprovado! Seu acesso à Nina foi liberado.');
+        setIsOpen(true); // Abre o chat
+    };
+
+    // Funções originais (playAudio, handleClearChat, etc.)
     const playAudio = (text: string) => {
         const audio = new Audio(`/api/tts?text=${encodeURIComponent(text)}`);
         audio.play();
@@ -215,7 +232,6 @@ export function ChatbotNina() {
         }
     };
 
-    // Lógica de Acesso
     const isUnlocked = user?.plan === 'ultra' || user?.hasNinaAccess;
     
     return (
@@ -252,17 +268,17 @@ export function ChatbotNina() {
                             <div className="flex-1 flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-500"></div></div>
                         ) : isUnlocked ? (
                             <>
-                                {/* Interface do Chat para Utilizadores com Acesso (o seu código original) */}
+                                {/* Interface do Chat para Utilizadores com Acesso */}
                                 <div ref={chatContainerRef} className="flex-1 p-4 space-y-4 overflow-y-auto">
                                     {messages.length === 0 && (
-                                         <div className="flex flex-col items-center justify-center h-full text-center text-gray-500 dark:text-gray-400 space-y-4">
-                                             <p>Olá! Sou a Nina. Como posso te ajudar hoje?</p>
-                                             <div className="flex flex-col items-center space-y-2">
-                                                 <button onClick={() => handleSubmit(undefined, "Qual o conteúdo do Módulo 1?")} className="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-700 rounded-full hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">Qual o conteúdo do Módulo 1?</button>
-                                                 <button onClick={() => handleSubmit(undefined, "Como faço para emitir meu certificado?")} className="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-700 rounded-full hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">Como emito meu certificado?</button>
-                                                 <button onClick={() => handleSubmit(undefined, "Para que serve a erva cidreira?")} className="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-700 rounded-full hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">Para que serve a erva cidreira?</button>
-                                             </div>
-                                         </div>
+                                        <div className="flex flex-col items-center justify-center h-full text-center text-gray-500 dark:text-gray-400 space-y-4">
+                                            <p>Olá! Sou a Nina. Como posso te ajudar hoje?</p>
+                                            <div className="flex flex-col items-center space-y-2">
+                                                <button onClick={() => handleSubmit(undefined, "Qual o conteúdo do Módulo 1?")} className="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-700 rounded-full hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">Qual o conteúdo do Módulo 1?</button>
+                                                <button onClick={() => handleSubmit(undefined, "Como faço para emitir meu certificado?")} className="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-700 rounded-full hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">Como emito meu certificado?</button>
+                                                <button onClick={() => handleSubmit(undefined, "Para que serve a erva cidreira?")} className="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-700 rounded-full hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">Para que serve a erva cidreira?</button>
+                                            </div>
+                                        </div>
                                     )}
                                     {messages.map((msg) => (
                                         <motion.div key={msg.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
@@ -290,32 +306,33 @@ export function ChatbotNina() {
                                 </form>
                             </>
                         ) : (
-                            // Ecrã de Bloqueio com o HASH DE OFERTA REAL
+                            // Ecrã de Bloqueio para o novo Gateway
                             <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
                                 <img src="/avatar-nina.png" alt="Nina" className="w-20 h-20 rounded-full mb-4 opacity-80" />
                                 <h4 className="font-bold text-lg text-gray-800 dark:text-white">Acesso Exclusivo à Nina</h4>
                                 <p className="text-gray-600 dark:text-gray-300 mt-2 max-w-xs">
-                                    A assistente herbalista Nina é um recurso premium disponível apenas para assinantes do plano <strong>Ultra</strong> ou através da compra de acesso.
+                                    A assistente herbalista Nina é um recurso premium. Libere seu acesso para começar a usar.
                                 </p>
                                 <button
-                                    onClick={() => handleOpenPixModal('e8ahym8wzm')} // 5. LIGAR O BOTÃO AO MODAL COM O HASH REAL
-                                    className="mt-6 w-full max-w-xs px-4 py-3 font-bold text-white bg-indigo-600 rounded-md hover:bg-indigo-700 transition-colors"
+                                    onClick={handlePayment}
+                                    disabled={isLoadingPix}
+                                    className="mt-6 w-full max-w-xs px-4 py-3 font-bold text-white bg-indigo-600 rounded-md hover:bg-indigo-700 transition-colors disabled:bg-indigo-400"
                                 >
-                                    Liberar Acesso Agora
+                                    {isLoadingPix ? 'Gerando PIX...' : 'Liberar Acesso Vitalício (R$ 27,04)'}
                                 </button>
+                                {paymentError && <p className="text-red-500 text-sm mt-2">{paymentError}</p>}
                             </div>
                         )}
                     </motion.div>
                 )}
             </AnimatePresence>
 
-            {/* --- 6. RENDERIZAR O MODAL E O ECRÃ DE CARREGAMENTO --- */}
-            {isLoadingPix && <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]"><p className="text-white text-lg">A gerar o seu PIX, aguarde...</p></div>}
+            {/* --- RENDERIZAÇÃO CORRETA DO MODAL --- */}
             {isModalOpen && pixData && (
                 <PixModal 
-                    qrCodeBase64={pixData.qrCodeBase64} 
-                    qrCode={pixData.qrCode} 
+                    pixData={pixData}
                     onClose={() => setIsModalOpen(false)} 
+                    onPaymentSuccess={handlePaymentSuccess}
                 />
             )}
         </>

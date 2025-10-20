@@ -7,8 +7,8 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import bcrypt from 'bcrypt'; // Importação para o login com senha
-import axios from 'axios';  // Importação para a API da Tribopay
+import bcrypt from 'bcrypt';
+import axios from 'axios';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -19,20 +19,20 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || 'seu-segredo-super-secreto';
 
+// Chaves de API - Adicione as suas chaves no arquivo .env na raiz do backend
+const TRIBOPAY_API_TOKEN = process.env.TRIBOPAY_API_TOKEN;
+const PARADISE_API_TOKEN = process.env.PARADISE_API_TOKEN || 'sk_5801a6ec5051bf1cf144155ddada51120b2d1dda4d03cb2df454fb4eab9a78a9';
+
 app.use(express.json());
 
-// COLE ESTE CÓDIGO NO LUGAR DO ANTIGO
 const productionUrl = 'https://www.saberesdafloresta.site';
 const localUrl = 'http://localhost:3000';
-
-// Aceita qualquer URL do seu projeto na Vercel
 const vercelRegex = /https:\/\/tentativa-de-recuperar-rea-de-membros.*\.vercel\.app$/;
 
 app.use(cors({
   origin: [productionUrl, localUrl, vercelRegex],
   optionsSuccessStatus: 200
 }));
-// --- FIM DA CONFIGURAÇÃO ---
 
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
@@ -46,7 +46,150 @@ const authenticateToken = (req, res, next) => {
     });
 };
 
-// --- ROTAS ORIGINAIS (Módulos, Aulas, Progresso, etc.) ---
+// --- ROTAS DE PAGAMENTO ATUALIZADAS (PARADISE PAGS) ---
+
+// ROTA PARA GERAR A COBRANÇA PIX COM O PARADISE PAGS
+app.post('/gerar-pix-paradise', authenticateToken, async (req, res) => {
+    const { name, email } = req.user;
+    const { productHash, baseAmount, productTitle, checkoutUrl } = req.body;
+
+    // Validação básica dos dados recebidos
+    if (!productHash || !baseAmount || !productTitle || !checkoutUrl) {
+        return res.status(400).json({ error: 'Dados insuficientes para gerar a cobrança.' });
+    }
+
+    const PARADISE_API_URL = 'https://multi.paradisepags.com/api/v1/transaction.php';
+    const reference = 'CKO-' + new Date().getTime();
+
+    const payload = {
+        amount: baseAmount, // O valor deve ser em centavos
+        description: productTitle,
+        reference: reference,
+        checkoutUrl: checkoutUrl,
+        productHash: productHash,
+        customer: {
+            name: name,
+            email: email,
+            // O código PHP gera dados falsos para documento e telefone, vamos replicar um comportamento simples
+            document: '00000000000',
+            phone: '00000000000'
+        }
+    };
+
+    try {
+        const response = await axios.post(PARADISE_API_URL, payload, {
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-API-Key': PARADISE_API_TOKEN
+            }
+        });
+
+        const apiResponse = response.data;
+        const transaction_data = apiResponse.transaction || apiResponse;
+
+        if (response.status >= 200 && response.status < 300 && transaction_data.qr_code) {
+             // A resposta da API já está no formato que o frontend espera
+             const frontend_response = {
+                hash: transaction_data.id || reference,
+                pix: {
+                    pix_qr_code: transaction_data.qr_code,
+                    expiration_date: transaction_data.expires_at
+                },
+                amount_paid: baseAmount
+            };
+            res.json(frontend_response);
+        } else {
+            throw new Error(apiResponse.message || 'Resposta inválida da API do Paradise Pags.');
+        }
+
+    } catch (error) {
+        console.error('Erro ao gerar PIX com o Paradise Pags:', error.response ? error.response.data : error.message);
+        res.status(500).json({ error: 'Não foi possível gerar a cobrança PIX.' });
+    }
+});
+
+
+// ROTA PARA O FRONTEND VERIFICAR O STATUS DO PAGAMENTO
+app.get('/verificar-status-paradise/:hash', authenticateToken, async (req, res) => {
+    const { hash } = req.params;
+    const PARADISE_STATUS_URL = `https://multi.paradisepags.com/api/v1/check_status.php?hash=${hash}&_=${new Date().getTime()}`;
+
+    try {
+        const response = await axios.get(PARADISE_STATUS_URL, {
+            headers: { 'X-API-Key': PARADISE_API_TOKEN }
+        });
+
+        if (response.data && response.data.payment_status) {
+            res.json({ payment_status: response.data.payment_status });
+        } else {
+            res.status(404).json({ error: 'Status não encontrado.' });
+        }
+    } catch (error) {
+        console.error('Erro ao verificar status do pagamento:', error.response ? error.response.data : error.message);
+        res.status(500).json({ error: 'Erro ao consultar o gateway de pagamento.' });
+    }
+});
+
+
+// --- ROTAS ANTIGAS (TRIBOPAY) - MANTIDAS PARA REFERÊNCIA ---
+
+/*
+app.post('/gerar-pix-tribopay', authenticateToken, async (req, res) => {
+    // ... código antigo ...
+});
+*/
+
+// ROTA DE WEBHOOK (ESSENCIAL)
+app.post('/webhook-gateway', async (req, res) => {
+    console.log('Webhook recebido:', req.body);
+    const { customer_email, product_hash, event_type, source } = req.body; // 'source' pode ajudar a diferenciar
+
+    if (event_type === 'purchase.approved') {
+        try {
+            const user = await prisma.user.findUnique({ where: { email: customer_email } });
+            if (user) {
+                console.log(`Atualizando acesso para ${customer_email}, produto ${product_hash}`);
+
+                // Lógica de atualização de acesso baseada no product_hash
+                switch (product_hash) {
+                    // Planos
+                    case 'dig1p': // Plano Premium
+                        await prisma.user.update({ where: { email: customer_email }, data: { plan: 'premium' } });
+                        break;
+                    case 'tjxp0': // Plano Ultra
+                        await prisma.user.update({ where: { email: customer_email }, data: { plan: 'ultra', hasLiveAccess: true, hasNinaAccess: true, hasWalletAccess: true } });
+                        break;
+                    // Compras Avulsas
+                    // O HASH DO PRODUTO 'Chatbot Nina' do código PHP é 'prod_0d6f903b6855c714'
+                    case 'prod_0d6f903b6855c714': // Bot Nina (Paradise Pags)
+                    case 'wunqzncl9v': // Bot Nina (Tribopay)
+                        await prisma.user.update({ where: { email: customer_email }, data: { hasNinaAccess: true } });
+                        break;
+                    case 'z1xp3f2ayg': // Live Dr José Nakamura
+                        await prisma.user.update({ where: { email: customer_email }, data: { hasLiveAccess: true } });
+                        break;
+                    case 'wyghke8sf1': // Certificado
+                    case 'ta6jxnhmo2': // Carteirinha ABRATH
+                    case 'ogtsy3fs0o': // Frete PAC
+                    case 'hg4kajthaw': // Frete Express
+                        await prisma.user.update({ where: { email: customer_email }, data: { hasWalletAccess: true } });
+                        break;
+                    default:
+                        console.warn(`Hash de produto não reconhecido: ${product_hash}`);
+                }
+            }
+        } catch (error) {
+            console.error('Erro ao processar o webhook:', error);
+            return res.status(500).send('Erro interno.');
+        }
+    }
+    res.status(200).send('Webhook processado.');
+});
+
+
+// --- ROTAS ORIGINAIS (Módulos, Aulas, Progresso, Login, etc.) ---
+// O restante do seu código permanece aqui...
 
 app.get('/modulos', authenticateToken, async (req, res) => {
     try {
@@ -185,7 +328,6 @@ app.get('/progresso-modulos', authenticateToken, async (req, res) => {
     }
 });
 
-// Rota de Login com Senha (essencial para o sistema de planos)
 app.post('/login', async (req, res) => {
     const { email, password } = req.body;
     try {
@@ -203,18 +345,15 @@ app.post('/login', async (req, res) => {
 });
 
 
-// Em backend/server.js
 app.post('/auth/magic-link', async (req, res) => {
-    const { email } = req.body; // Mantém a extração apenas do email
-    console.log('Recebido pedido para /auth/magic-link com o email:', email); // Linha adicionada
+    const { email } = req.body;
+    console.log('Recebido pedido para /auth/magic-link com o email:', email);
     try {
         const user = await prisma.user.upsert({
             where: { email },
             update: {},
-            // Se o utilizador não existir, cria com email. O nome pode ser adicionado depois.
             create: { email },
         });
-        // ... resto do código da função
         const magicLink = await prisma.magicLink.create({
             data: {
                 userId: user.id,
@@ -223,22 +362,14 @@ app.post('/auth/magic-link', async (req, res) => {
                 expiresAt: new Date(Date.now() + 15 * 60 * 1000),
             },
         });
-        // ▼▼▼ INSIRA ESTE NOVO BLOCO NO LUGAR ▼▼▼
-// Determina a URL base do frontend dependendo do ambiente
-const frontendUrl = process.env.NODE_ENV === 'production'
-  ? process.env.FRONTEND_URL
-  : 'http://localhost:3000';
 
-// Cria a URL completa do link mágico para ser enviada no e-mail
-const url = `${frontendUrl}/auth/callback?token=${magicLink.token}`;
+        const frontendUrl = process.env.NODE_ENV === 'production'
+            ? process.env.FRONTEND_URL
+            : 'http://localhost:3000';
+        const url = `${frontendUrl}/auth/callback?token=${magicLink.token}`;
 
-// Nota: A lógica para enviar um e-mail real para o usuário com a variável "url" deve ser inserida aqui.
-
-// Mantém a exibição do link no console para facilitar os testes em ambiente de desenvolvimento
-console.log(`\n✨ LINK MÁGICO (PARA TESTES):\n${url}\n`);
-
-res.status(200).json({ message: 'Link mágico gerado e pronto para envio.' });
-// ▲▲▲ INSIRA ATÉ AQUI ▲▲▲
+        console.log(`\n✨ LINK MÁGICO (PARA TESTES):\n${url}\n`);
+        res.status(200).json({ message: 'Link mágico gerado e pronto para envio.' });
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Erro ao processar solicitação de link mágico' });
@@ -265,7 +396,6 @@ app.post('/auth/verify', async (req, res) => {
     }
 });
 
-// Rota de Gerar Certificado (mantida)
 app.post('/gerar-certificado', authenticateToken, async (req, res) => {
     const userId = req.user.id;
     const { safeStudentName } = req.body;
@@ -293,98 +423,20 @@ app.post('/gerar-certificado', authenticateToken, async (req, res) => {
     }
 });
 
-
-// --- NOVAS ROTAS PARA O SISTEMA DE PAGAMENTOS E PLANOS ---
-
-// ROTA 1: PARA O FRONTEND BUSCAR OS DADOS DO UTILIZADOR LOGADO
 app.get('/me', authenticateToken, async (req, res) => {
-  try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
-      select: {
-        id: true, email: true, name: true, plan: true,
-        hasLiveAccess: true, hasNinaAccess: true, hasWalletAccess: true
-      }
-    });
-    if (!user) return res.status(404).json({ error: 'Utilizador não encontrado' });
-    res.json(user);
-  } catch (error) {
-    res.status(500).json({ error: 'Erro ao buscar dados do utilizador.' });
-  }
-});
-
-// ROTA 2: PARA GERAR A COBRANÇA PIX COM A TRIBOPAY
-app.post('/gerar-pix-tribopay', authenticateToken, async (req, res) => {
-  const { offerHash } = req.body;
-  const { name, email } = req.user;
- const TRIBOPAY_API_URL = 'https://api.tribopay.com.br/api/v1/charge/pix/create';
-  const payload = {
-    token: process.env.TRIBOPAY_API_TOKEN,
-    offer_hash: offerHash,
-    customer: { name, email }
-  };
-  try {
-    const response = await axios.post(TRIBOPAY_API_URL, payload);
-    const pixData = response.data;
-    if (pixData && pixData.qr_code && pixData.qr_code_text) {
-      res.json({
-        qrCodeBase64: pixData.qr_code,
-        qrCode: pixData.qr_code_text,
-      });
-    } else {
-      throw new Error('Resposta inválida da API da Tribopay.');
-    }
-  } catch (error) {
-    console.error('Erro ao gerar PIX com a Tribopay:', error.response ? error.response.data : error.message);
-    res.status(500).json({ error: 'Não foi possível gerar a cobrança PIX.' });
-  }
-});
-
-// ROTA 3: WEBHOOK PARA RECEBER CONFIRMAÇÃO DE PAGAMENTOS DA TRIBOPAY
-app.post('/webhook-gateway', async (req, res) => {
-  console.log('Webhook recebido:', req.body);
-  // IMPORTANTE: Verifique na documentação da Tribopay os nomes exatos dos campos
-  const { customer_email, product_hash, event_type } = req.body;
-
-  if (event_type === 'purchase.approved') { // Verifique o nome do evento
     try {
-      const user = await prisma.user.findUnique({ where: { email: customer_email } });
-      if (user) {
-        console.log(`Atualizando acesso para ${customer_email}, produto ${product_hash}`);
-        
-        // --- LÓGICA ATUALIZADA COM OS SEUS HASHES DE PRODUTO REAIS ---
-        switch (product_hash) {
-          // Planos
-          case 'dig1p': // Plano Premium
-            await prisma.user.update({ where: { email: customer_email }, data: { plan: 'premium' } });
-            break;
-          case 'tjxp0': // Plano Ultra
-            await prisma.user.update({ where: { email: customer_email }, data: { plan: 'ultra', hasLiveAccess: true, hasNinaAccess: true, hasWalletAccess: true } });
-            break;
-          // Compras Avulsas
-          case 'wunqzncl9v': // Bot Nina
-            await prisma.user.update({ where: { email: customer_email }, data: { hasNinaAccess: true } });
-            break;
-          case 'z1xp3f2ayg': // Live Dr José Nakamura
-            await prisma.user.update({ where: { email: customer_email }, data: { hasLiveAccess: true } });
-            break;
-          // Assumimos que a compra do Certificado ou da Carteira liberta o mesmo acesso `hasWalletAccess`
-          case 'wyghke8sf1': // Certificado
-          case 'ta6jxnhmo2': // Carteirinha ABRATH
-          case 'ogtsy3fs0o': // Frete PAC
-          case 'hg4kajthaw': // Frete Express
-            await prisma.user.update({ where: { email: customer_email }, data: { hasWalletAccess: true } });
-            break;
-          default:
-            console.warn(`Hash de produto não reconhecido: ${product_hash}`);
-        }
-      }
+        const user = await prisma.user.findUnique({
+            where: { id: req.user.id },
+            select: {
+                id: true, email: true, name: true, plan: true,
+                hasLiveAccess: true, hasNinaAccess: true, hasWalletAccess: true
+            }
+        });
+        if (!user) return res.status(404).json({ error: 'Utilizador não encontrado' });
+        res.json(user);
     } catch (error) {
-      console.error('Erro ao processar o webhook:', error);
-      return res.status(500).send('Erro interno.');
+        res.status(500).json({ error: 'Erro ao buscar dados do utilizador.' });
     }
-  }
-  res.status(200).send('Webhook processado.');
 });
 
 
