@@ -166,43 +166,45 @@ app.post('/webhook-gateway', async (req, res) => {
             if (user) {
                 console.log(`Atualizando acesso para ${customer_email}, produto ${product_hash}`);
 
-                // --- LÓGICA DE ATUALIZAÇÃO DE ACESSO ---
-                // Atualiza os campos de acesso do usuário com base no produto comprado
-                // Dentro da rota /webhook-gateway no backend/server.js
+               // Dentro da rota /webhook-gateway no backend/server.js
 
 // ... (código anterior do webhook) ...
 
                 switch (product_hash) {
-                    // Planos (verificar se ainda são válidos ou migraram)
-                    case 'dig1p': // Plano Premium (Antigo)
+                    // Planos (Verificar se ainda são válidos)
+                    case 'dig1p': // Premium (Antigo)
                         await prisma.user.update({ where: { email: customer_email }, data: { plan: 'premium' } });
                         break;
-                    case 'tjxp0': // Plano Ultra (Antigo)
+                    case 'tjxp0': // Ultra (Antigo)
                         await prisma.user.update({ where: { email: customer_email }, data: { plan: 'ultra', hasLiveAccess: true, hasNinaAccess: true, hasWalletAccess: true } });
                         break;
                     // Compras Avulsas
-                    case 'prod_0d6f903b6855c714': // Chatbot Nina (Paradise)
-                    case 'wunqzncl9v': // Chatbot Nina (Antigo)
+                    case 'prod_0d6f903b6855c714': // Nina (Paradise)
+                    case 'wunqzncl9v': // Nina (Antigo)
                         await prisma.user.update({ where: { email: customer_email }, data: { hasNinaAccess: true } });
                         break;
-                    case 'prod_cb02db3516be7ede': // Live Dr José Nakamura (Paradise)
-                    case 'z1xp3f2ayg': // Live Dr José Nakamura (Antigo)
+                    case 'prod_cb02db3516be7ede': // Live (Paradise)
+                    case 'z1xp3f2ayg': // Live (Antigo)
                         await prisma.user.update({ where: { email: customer_email }, data: { hasLiveAccess: true } });
                         break;
-                    // ▼▼▼ ADICIONADO/ATUALIZADO AQUI ▼▼▼
+                    // Certificado, Carteira e Fretes
                     case 'prod_0bc162e2175f527f': // Certificado (Paradise)
                     case 'wyghke8sf1': // Certificado (Antigo)
                     case 'prod_375f8ceb7a4cffcc': // Carteira ABRATH (Paradise)
-                    case 'ta6jxnhmo2': // Carteirinha ABRATH (Antigo)
-                    case 'ogtsy3fs0o': // Frete PAC (Antigo OU Paradise?)
-                    case 'hg4kajthaw': // Frete Express (Antigo OU Paradise?)
-                        // Assumindo que todos estes dão o mesmo acesso 'hasWalletAccess'
+                    case 'ta6jxnhmo2': // Carteira ABRATH (Antigo)
+                    // ▼▼▼ ADICIONADO/ATUALIZADO AQUI ▼▼▼
+                    case 'prod_3aeba29f077583c1': // Frete Express E PAC (Paradise - CONFIRMAR PAC)
+                    case 'ogtsy3fs0o': // Frete PAC (Antigo)
+                    case 'hg4kajthaw': // Frete Express (Antigo)
+                    // ▲▲▲ FIM DA ATUALIZAÇÃO ▲▲▲
+                        // Todos estes dão o mesmo acesso 'hasWalletAccess'
                         await prisma.user.update({ where: { email: customer_email }, data: { hasWalletAccess: true } });
                         break;
-                    // ▲▲▲ FIM DA ATUALIZAÇÃO ▲▲▲
                     default:
                         console.warn(`Webhook: Hash de produto não reconhecido: ${product_hash} para ${customer_email}`);
                 }
+
+// ... (resto do código do webhook) ...
 
 // ... (resto do código do webhook) ...
             } else {

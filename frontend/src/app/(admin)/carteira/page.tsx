@@ -14,23 +14,32 @@ interface PixData {
 }
 
 // Mapeamento ATUALIZADO dos Produtos e Preços
+// frontend/src/app/(admin)/carteira/page.tsx
+
+// ... (imports) ...
+
+// Mapeamento FINAL dos Produtos e Preços
 const PRODUCTS = {
   walletAccess: { // Taxa de emissão da carteira
-    hash: 'prod_375f8ceb7a4cffcc', // Hash da "Carteira ABRATH" do PHP
+    hash: 'prod_375f8ceb7a4cffcc', // Hash da "Carteira ABRATH" (Paradise)
     amount: 2700,                 // Valor do PHP (R$ 27,00)
     title: 'Taxa de Emissão da Carteira ABRATH'
   },
+  // ▼▼▼ ATUALIZADO AQUI ▼▼▼
   pac: {
-    hash: 'ogtsy3fs0o', // Hash antigo - PRECISA ATUALIZAR se migrou para Paradise
-    amount: 990,
-    title: 'Frete PAC'
+    hash: 'prod_3aeba29f077583c1', // Hash do PHP (CONFIRMAR SE É O MESMO DO EXPRESS)
+    amount: 990,                  // Valor do PHP (R$ 9,90)
+    title: 'Frete PAC'            // Título ajustado
   },
   express: {
-    hash: 'hg4kajthaw', // Hash antigo - PRECISA ATUALIZAR se migrou para Paradise
-    amount: 1490,
-    title: 'Frete Express'
+    hash: 'prod_3aeba29f077583c1', // Hash do PHP
+    amount: 1490,                 // Valor do PHP (R$ 14,90)
+    title: 'Frete Express'        // Título ajustado
   }
+  // ▲▲▲ FIM DA ATUALIZAÇÃO ▲▲▲
 };
+
+// ... (resto do componente CarteiraPage) ...
 // !! IMPORTANTE !!: Se os produtos de FRETE (PAC e Express) também foram migrados
 // para a Paradise Pags, você PRECISA substituir os hashes 'ogtsy...' e 'hg4k...'
 // pelos novos hashes corretos da Paradise Pags aqui.
