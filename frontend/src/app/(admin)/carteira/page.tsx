@@ -14,7 +14,7 @@ interface PixData {
 }
 
 // 2. Mapeamento dos Hashes de Produto (do seu server.js) e Preços
-// Assumi um valor de R$ 19,90 para a emissão, pois não estava especificado.
+// Assumi um valor de R$ 19,90 para a emissão. Ajuste se for outro.
 const PRODUCTS = {
   wallet: {
     hash: 'ta6jxnhmo2', // 'Carteirinha ABRATH' do server.js
@@ -63,11 +63,11 @@ export default function CarteiraPage() {
       const data = await response.json();
       if (data.erro) throw new Error('CEP não encontrado');
       setAddress({
-        street: data.logouro,
+        street: data.logouro || '', // fallback para string vazia
         number: '',
-        neighborhood: data.bairro,
-        city: data.localidade,
-        state: data.uf
+        neighborhood: data.bairro || '', // fallback para string vazia
+        city: data.localidade || '', // fallback para string vazia
+        state: data.uf || '', // fallback para string vazia
       });
     } catch (err: any) {
       setError(err.message);
@@ -160,8 +160,6 @@ export default function CarteiraPage() {
   }
   
   // Se o utilizador não tiver acesso (e não for Ultra), mostramos a tela de compra da carteira
-  // Esta lógica assume que a compra da carteira (ta6jxnhmo2) E do frete (ogtsy3fs0o/hg4kajthaw)
-  // são processos separados. A sua lógica anterior parecia ter 2 passos.
   if (!user?.hasWalletAccess && user?.plan !== 'ultra') {
     return (
         <section className="flex flex-col items-center w-full p-8 text-center">
@@ -192,9 +190,6 @@ export default function CarteiraPage() {
 
   // Se o utilizador for Ultra ou já tiver comprado o acesso (hasWalletAccess = true),
   // mostramos o formulário de frete.
-  // NOTA: A sua lógica no server.js dá `hasWalletAccess` na compra do frete.
-  // Se for esse o caso, a tela anterior pode ser pulada.
-  // Mas, seguindo a lógica do seu ficheiro, este é o segundo passo.
   return (
     <section className="flex flex-col items-center w-full p-8">
       <div className="text-center mb-10">
@@ -204,7 +199,6 @@ export default function CarteiraPage() {
 
       <div className="w-full max-w-2xl bg-gray-800 p-8 rounded-lg shadow-lg">
         <form onSubmit={handleSubmit}>
-          {/* ... (Todo o seu formulário de CEP e Endereço permanece o mesmo) ... */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="md:col-span-2">
               <label htmlFor="recipientName" className="block text-sm font-medium text-gray-300 mb-2">Nome do Destinatário</label>
@@ -237,7 +231,6 @@ export default function CarteiraPage() {
               <input type="text" id="state" value={address.state} readOnly className="w-full p-3 bg-gray-600 border border-gray-500 rounded-md text-gray-400 cursor-not-allowed" />
             </div>
           </div>
-          {/* ... (Fim do formulário de endereço) ... */}
           
           <div className="mt-8">
             <h3 className="text-lg font-medium text-white mb-4">Opções de Entrega</h3>
