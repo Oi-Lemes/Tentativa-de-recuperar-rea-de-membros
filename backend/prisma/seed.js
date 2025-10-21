@@ -63,15 +63,18 @@ const modulosData = [
 async function main() {
     console.log(`Iniciando o seeding com os dados REAIS do curso (${modulosData.length} módulos)...`);
 
-    // As linhas de deleteMany continuam comentadas
-    // console.log('Limpando o banco de dados...');
-    // await prisma.progresso.deleteMany({});
-    // await prisma.magicLink.deleteMany({});
-    // await prisma.aula.deleteMany({});
-    // await prisma.modulo.deleteMany({});
-    // await prisma.user.deleteMany({});
-    // console.log('Banco de dados limpo.');
+    console.log('Limpando o banco de dados...');
+// É importante deletar tabelas relacionadas primeiro
+await prisma.progresso.deleteMany({});
+await prisma.aula.deleteMany({});
 
+// Agora pode deletar os módulos
+await prisma.modulo.deleteMany({}); 
+
+// Delete o resto se necessário (links e usuários)
+// await prisma.magicLink.deleteMany({});
+// await prisma.user.deleteMany({});
+console.log('Banco de dados limpo.');
     console.log('Criando módulos e aulas...');
     let moduloOrder = 1;
     for (const moduloData of modulosData) {
