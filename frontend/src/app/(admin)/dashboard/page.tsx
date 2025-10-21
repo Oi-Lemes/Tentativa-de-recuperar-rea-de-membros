@@ -17,35 +17,36 @@ interface PixData {
 
 // 2. Mapeamento dos Hashes de Produto (do seu server.js) e Preços
 // Usei os preços baseados nos seus planos, ajuste se necessário.
+// 2. Mapeamento dos Hashes de Produto (do seu server.js) e Preços
 const PRODUCTS = {
   premium: {
-    hash: 'dig1p', // Plano Premium
-    amount: 9700, // Exemplo: R$ 97,00 (ajuste)
+    hash: 'dig1p', // Plano Premium (Ainda usa hash antigo? Se sim, ok. Se migrou, atualize)
+    amount: 9700,
     title: 'Plano Premium'
   },
   ultra: {
-    hash: 'tjxp0', // Plano Ultra
-    amount: 19700, // Exemplo: R$ 197,00 (ajuste)
+    hash: 'tjxp0', // Plano Ultra (Ainda usa hash antigo? Se sim, ok. Se migrou, atualize)
+    amount: 19700,
     title: 'Plano Ultra'
   },
-  live: {
-    hash: 'z1xp3f2ayg', // Live Dr José Nakamura
-    amount: 4700, // Exemplo: R$ 47,00 (ajuste)
-    title: 'Acesso à Live'
+  live: { // <<< CORRIGIDO AQUI
+    hash: 'prod_cb02db3516be7ede', // Live Dr José Nakamura (NOVO HASH Paradise Pags)
+    amount: 6700, // Valor correto do PHP
+    title: 'Dr José Nakamura' // Título correto do PHP
   },
   nina: {
     hash: 'prod_0d6f903b6855c714', // Chatbot Nina (Paradise)
-    amount: 2704, // R$ 27,04
+    amount: 2704,
     title: 'Acesso ao Chatbot Nina'
   },
   certificate: {
-    hash: 'wyghke8sf1', // Certificado
-    amount: 1990, // Exemplo: R$ 19,90 (ajuste)
+    hash: 'wyghke8sf1', // Certificado (Ainda usa hash antigo? Se sim, ok. Se migrou, atualize)
+    amount: 1990,
     title: 'Taxa de Emissão do Certificado'
   },
   wallet: {
-    hash: 'ta6jxnhmo2', // Carteirinha ABRATH
-    amount: 1990, // Exemplo: R$ 19,90 (ajuste)
+    hash: 'ta6jxnhmo2', // Carteirinha ABRATH (Ainda usa hash antigo? Se sim, ok. Se migrou, atualize)
+    amount: 1990,
     title: 'Taxa de Emissão da Carteira'
   }
 };
