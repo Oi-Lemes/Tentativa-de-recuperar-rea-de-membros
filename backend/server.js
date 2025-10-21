@@ -79,6 +79,12 @@ app.post('/gerar-pix-paradise', authenticateToken, async (req, res) => {
         // Poderia adicionar 'tracking' aqui se necessário (utms, fbc, fbp)
     };
 
+// ▼▼▼ ADICIONE ESTE LOG ▼▼▼
+    console.log('--- Payload enviado para Paradise Pags ---');
+    console.log(JSON.stringify(payload, null, 2)); // Loga o payload formatado
+    console.log('--- Fim do Payload ---');
+    // ▲▲▲ FIM DO LOG ▲▲▲
+
     try {
         // Faz a chamada POST para a API do Paradise Pags
         const response = await axios.post(PARADISE_API_URL, payload, {
