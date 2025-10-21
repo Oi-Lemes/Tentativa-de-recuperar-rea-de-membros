@@ -68,7 +68,9 @@ app.post('/gerar-pix-paradise', authenticateToken, async (req, res) => {
         checkoutUrl: checkoutUrl,
         productHash: productHash,
         customer: {
-            name: name,
+            // ▼▼▼ AQUI ESTÁ A CORREÇÃO ESSENCIAL ▼▼▼
+            name: name || email, // Se 'name' for nulo ou vazio, usa o 'email'.
+            // ▲▲▲ FIM DA CORREÇÃO ▲▲▲
             email: email,
             // O código PHP gera dados falsos para documento e telefone, vamos replicar um comportamento simples
             document: '00000000000',
