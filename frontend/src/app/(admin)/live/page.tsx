@@ -1,73 +1,165 @@
+// Caminho: frontend/src/app/(admin)/live/page.tsx
 "use client";
 
-import { useEffect, useState } from 'react';
-import Link from 'next/link';
+import { useState } from 'react';
+import { useUser } from '@/contexts/UserContext';
+import { PixModal } from '@/components/PixModal';
 import Image from 'next/image';
 
+// Interface PixData (igual aos outros ficheiros)
+interface PixData {
+  pix_qr_code: string;
+  amount_paid: number;
+  expiration_date: string;
+  hash: string;
+}
+
+// Detalhes do Produto "Live"
+const LIVE_PRODUCT = {
+  hash: 'prod_cb02db3516be7ede', // Hash do PHP
+  amount: 6700,                 // Valor em centavos do PHP
+  title: 'Dr José Nakamura'     // Título do PHP
+};
+
 export default function LivePage() {
-  const [proximaLive, setProximaLive] = useState('');
+  const { user, loading: userLoading, refetchUser } = useUser();
 
-  useEffect(() => {
-    const calcularProximaQuinta = () => {
-      const hoje = new Date();
-      const seteDiasNoFuturo = new Date(hoje.setDate(hoje.getDate() + 7));
-      
-      let dataAtual = seteDiasNoFuturo;
-      while (dataAtual.getDay() !== 4) { // 4 = Quinta-feira
-        dataAtual.setDate(dataAtual.getDate() + 1);
-      }
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [pixData, setPixData] = useState<PixData | null>(null);
+  const [isLoadingPix, setIsLoadingPix] = useState(false);
+  const [paymentError, setPaymentError] = useState('');
 
-      const opcoes: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'long', year: 'numeric' };
-      setProximaLive(dataAtual.toLocaleDateString('pt-BR', opcoes));
+  const handleOpenPixModal = async () => {
+    if (!user) {
+      alert("Utilizador não autenticado.");
+      return;
+    }
+    setIsLoadingPix(true);
+    setPaymentError('');
+    const token = localStorage.getItem('token');
+
+    const paymentPayload = {
+      productHash: LIVE_PRODUCT.hash,
+      baseAmount: LIVE_PRODUCT.amount,
+      productTitle: LIVE_PRODUCT.title,
+      checkoutUrl: window.location.href
     };
 
-    calcularProximaQuinta();
-  }, []);
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL;
+      const response = await fetch(`${backendUrl}/gerar-pix-paradise`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(paymentPayload),
+      });
+      
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Falha ao gerar o PIX.');
 
-  return (
-    <div className="w-full max-w-4xl mx-auto">
-      <nav className="mb-6 mt-16 md:mt-0">
-        <Link href="/dashboard" className="text-blue-400 hover:underline flex items-center gap-2 text-sm sm:text-base">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
-          Voltar para o Dashboard
-        </Link>
-      </nav>
+      setPixData({
+        pix_qr_code: result.pix.pix_qr_code,
+        amount_paid: result.amount_paid,
+        expiration_date: result.pix.expiration_date,
+        hash: result.hash
+      });
+      setIsModalOpen(true);
+    } catch (error) {
+      console.error(error);
+      setPaymentError(error instanceof Error ? error.message : "Ocorreu um erro desconhecido.");
+    } finally {
+      setIsLoadingPix(false);
+    }
+  };
 
-      {/* Estrutura ajustada para destacar a imagem */}
-      <div className="relative flex flex-col items-center mt-16 sm:mt-20">
-        
-        {/* Imagem do Doutor, maior e posicionada acima */}
-        <div className="relative w-48 h-48 sm:w-56 sm:h-56 -mb-24 sm:-mb-28 z-10">
-          <Image
-            src="/img/fundodr.png"
-            alt="Dr. José Nakamura"
-            layout="fill"
-            objectFit="contain" // Garante que a imagem não seja cortada
-            className="rounded-full border-4 border-gray-800 shadow-lg"
-            priority
-          />
+  const handlePaymentSuccess = () => {
+    setIsModalOpen(false);
+    refetchUser(); // Atualiza os dados do usuário (buscará o `hasLiveAccess`)
+    alert('Pagamento confirmado! Seu acesso à Live foi liberado.');
+  };
+
+  // ----- Renderização -----
+
+  if (userLoading) {
+    return <div className="flex justify-center items-center h-full"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div></div>;
+  }
+
+  // Se o usuário TEM acesso (Ultra OU comprou avulso)
+  if (user?.hasLiveAccess || user?.plan === 'ultra') {
+    return (
+      <section className="flex flex-col items-center w-full p-4 md:p-8">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-2">Live Exclusiva com Dr. José Nakamura</h1>
+          <p className="text-lg text-gray-300">Tema: A Ciência por Trás das Ervas Medicinais</p>
         </div>
 
-        {/* Caixa de conteúdo com espaçamento no topo para a imagem */}
-        <main className="relative bg-gray-800/50 p-6 sm:p-8 rounded-lg shadow-xl border border-gray-700 text-center flex flex-col items-center w-full pt-32 sm:pt-36">
-          
-          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-amber-300">Live com Dr. José Nakamura</h1>
-          <p className="text-base sm:text-lg text-gray-300 mt-4 max-w-2xl">
-            Um encontro ao vivo e exclusivo para os alunos do curso Saberes da Floresta.
-          </p>
+        <div className="w-full max-w-4xl bg-black rounded-lg overflow-hidden shadow-2xl mb-8 aspect-video">
+          {/* O seu iframe ou player de vídeo vai aqui */}
+           <iframe
+            className="w-full h-full"
+            src="https://www.youtube.com/embed/dQw4w9WgXcQ?autoplay=1" // Link de Exemplo - SUBSTITUA PELO SEU LINK REAL
+            title="Live Dr. José Nakamura"
+            frameBorder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+          ></iframe>
+        </div>
 
-          <div className="mt-8 border-2 border-dashed border-gray-600 rounded-lg p-6 w-full max-w-md">
-            <p className="text-base sm:text-lg text-gray-400">A nossa próxima live está marcada para:</p>
-            <p className="text-xl sm:text-2xl font-bold text-white mt-2">
-              {proximaLive || 'A calcular...'}
-            </p>
-          </div>
-
-          <p className="text-sm text-gray-400 mt-8 max-w-xl">
-            Nesta data, o link de acesso à transmissão ao vivo aparecerá aqui.
+        <div className="w-full max-w-4xl bg-gray-800 p-6 rounded-lg shadow-lg text-gray-300">
+          <h2 className="text-2xl font-semibold text-white mb-4">Sobre a Live</h2>
+          <p className="mb-4">
+            Neste encontro exclusivo, o Dr. José Nakamura, renomado especialista em fitoterapia,
+            compartilha insights valiosos sobre como as plantas medicinais atuam no nosso corpo,
+            desmistificando crenças populares e apresentando as últimas descobertas científicas.
           </p>
-        </main>
+          <p>
+            Prepare suas perguntas e participe de uma sessão interativa de Q&A ao final da apresentação.
+          </p>
+          {/* Adicione mais informações se desejar */}
+        </div>
+      </section>
+    );
+  }
+
+  // Se o usuário NÃO tem acesso
+  return (
+    <section className="flex flex-col items-center justify-center h-full text-center p-4 md:p-8">
+       <div className="relative w-full max-w-md h-auto mb-6">
+        <Image
+          src="/img/fundodr.png" // Use a imagem de fundo que desejar
+          alt="Live Dr. José Nakamura"
+          width={500}
+          height={300} // Ajuste a altura conforme necessário
+          className="rounded-lg shadow-lg"
+          objectFit="cover" // Garante que a imagem cubra a área
+        />
       </div>
-    </div>
+      <h1 className="text-3xl md:text-4xl font-bold text-white mb-3">Live Exclusiva com Dr. José Nakamura</h1>
+      <p className="text-gray-300 mb-6 max-w-lg">
+        Garanta seu acesso a este encontro único para aprofundar seus conhecimentos em fitoterapia diretamente com um especialista.
+      </p>
+      <div className="bg-gray-800 p-6 rounded-lg shadow-md max-w-sm w-full">
+         <p className="text-lg mb-1 text-gray-300">Acesso único por apenas</p>
+         <p className="text-4xl font-bold text-blue-400 mb-6">
+             {(LIVE_PRODUCT.amount / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+         </p>
+        <button
+            onClick={handleOpenPixModal}
+            disabled={isLoadingPix}
+            className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition-colors disabled:bg-blue-400"
+        >
+            {isLoadingPix ? 'Gerando PIX...' : 'Liberar Acesso com PIX'}
+        </button>
+        {paymentError && <p className="text-red-500 text-sm mt-4">{paymentError}</p>}
+      </div>
+
+      {/* Renderização do Modal */}
+      {isModalOpen && pixData && (
+          <PixModal
+            pixData={pixData}
+            onClose={() => setIsModalOpen(false)}
+            onPaymentSuccess={handlePaymentSuccess}
+          />
+      )}
+    </section>
   );
 }

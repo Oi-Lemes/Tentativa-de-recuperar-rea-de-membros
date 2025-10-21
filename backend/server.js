@@ -19,12 +19,12 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || 'seu-segredo-super-secreto';
 
-// Chaves de API - Adicione as suas chaves no arquivo .env na raiz do backend
-const TRIBOPAY_API_TOKEN = process.env.TRIBOPAY_API_TOKEN;
+// Chave da API Paradise Pags (pega da variável de ambiente ou usa o valor padrão)
 const PARADISE_API_TOKEN = process.env.PARADISE_API_TOKEN || 'sk_5801a6ec5051bf1cf144155ddada51120b2d1dda4d03cb2df454fb4eab9a78a9';
 
 app.use(express.json());
 
+// Configuração do CORS
 const productionUrl = 'https://www.saberesdafloresta.site';
 const localUrl = 'http://localhost:3000';
 const vercelRegex = /https:\/\/tentativa-de-recuperar-rea-de-membros.*\.vercel\.app$/;
@@ -34,24 +34,25 @@ app.use(cors({
   optionsSuccessStatus: 200
 }));
 
+// Middleware de Autenticação
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
-    if (token == null) return res.sendStatus(401);
+    if (token == null) return res.sendStatus(401); // Se não há token, não autorizado
 
     jwt.verify(token, JWT_SECRET, (err, user) => {
-        if (err) return res.sendStatus(403);
-        req.user = user;
-        next();
+        if (err) return res.sendStatus(403); // Se o token é inválido/expirado, proibido
+        req.user = user; // Adiciona os dados do usuário decodificados à requisição
+        next(); // Passa para a próxima rota/middleware
     });
 };
 
-// --- ROTAS DE PAGAMENTO ATUALIZADAS (PARADISE PAGS) ---
+// --- ROTAS DE PAGAMENTO (PARADISE PAGS) ---
 
-// ROTA PARA GERAR A COBRANÇA PIX COM O PARADISE PAGS
+// ROTA PARA GERAR A COBRANÇA PIX
 app.post('/gerar-pix-paradise', authenticateToken, async (req, res) => {
-    const { name, email } = req.user;
-    const { productHash, baseAmount, productTitle, checkoutUrl } = req.body;
+    const { name, email } = req.user; // Obtém nome e email do token JWT
+    const { productHash, baseAmount, productTitle, checkoutUrl } = req.body; // Obtém dados do produto do corpo da requisição
 
     // Validação básica dos dados recebidos
     if (!productHash || !baseAmount || !productTitle || !checkoutUrl) {
@@ -59,171 +60,179 @@ app.post('/gerar-pix-paradise', authenticateToken, async (req, res) => {
     }
 
     const PARADISE_API_URL = 'https://multi.paradisepags.com/api/v1/transaction.php';
-    const reference = 'CKO-' + new Date().getTime();
+    const reference = 'CKO-' + Date.now(); // Referência única simples
 
+    // Payload para a API Paradise Pags
     const payload = {
-        amount: baseAmount, // O valor deve ser em centavos
+        amount: baseAmount, // Valor em centavos
         description: productTitle,
         reference: reference,
-        checkoutUrl: checkoutUrl,
+        checkoutUrl: checkoutUrl, // URL da página onde o pagamento foi iniciado
         productHash: productHash,
         customer: {
-            // ▼▼▼ AQUI ESTÁ A CORREÇÃO ESSENCIAL ▼▼▼
-            name: name || email, // Se 'name' for nulo ou vazio, usa o 'email'.
-            // ▲▲▲ FIM DA CORREÇÃO ▲▲▲
+            name: name || email, // Usa o email como fallback se o nome não existir (importante para login mágico)
             email: email,
-            // O código PHP gera dados falsos para documento e telefone, vamos replicar um comportamento simples
+            // Valores padrão para campos não essenciais neste fluxo
             document: '00000000000',
             phone: '00000000000'
         }
+        // Poderia adicionar 'tracking' aqui se necessário (utms, fbc, fbp)
     };
 
     try {
+        // Faz a chamada POST para a API do Paradise Pags
         const response = await axios.post(PARADISE_API_URL, payload, {
             headers: {
                 'Content-Type': 'application/json',
                 'Accept': 'application/json',
-                'X-API-Key': PARADISE_API_TOKEN
+                'X-API-Key': PARADISE_API_TOKEN // Chave secreta da API
             }
         });
 
         const apiResponse = response.data;
+        // A resposta pode vir aninhada em 'transaction' ou não
         const transaction_data = apiResponse.transaction || apiResponse;
 
+        // Verifica se a resposta foi bem-sucedida e contém o QR code
         if (response.status >= 200 && response.status < 300 && transaction_data.qr_code) {
-             // A resposta da API já está no formato que o frontend espera
+             // Formata a resposta para o formato esperado pelo frontend
              const frontend_response = {
-                hash: transaction_data.id || reference,
+                hash: transaction_data.id || reference, // ID da transação ou referência
                 pix: {
-                    pix_qr_code: transaction_data.qr_code,
-                    expiration_date: transaction_data.expires_at
+                    pix_qr_code: transaction_data.qr_code, // Código PIX (Copia e Cola)
+                    expiration_date: transaction_data.expires_at // Data de expiração
                 },
-                amount_paid: baseAmount
+                amount_paid: baseAmount // Valor pago (para exibição no modal)
             };
-            res.json(frontend_response);
+            res.json(frontend_response); // Envia os dados do PIX para o frontend
         } else {
-            throw new Error(apiResponse.message || 'Resposta inválida da API do Paradise Pags.');
+            // Se a API retornou um erro
+            console.error('Erro da API Paradise Pags ao gerar PIX:', apiResponse);
+            res.status(response.status || 500).json({ error: apiResponse.message || 'Resposta inválida da API do Paradise Pags.' });
         }
 
     } catch (error) {
-        console.error('Erro ao gerar PIX com o Paradise Pags:', error.response ? error.response.data : error.message);
-        res.status(500).json({ error: 'Não foi possível gerar a cobrança PIX.' });
+        // Se ocorreu um erro na comunicação com a API (rede, etc.)
+        console.error('Erro interno ao gerar PIX com o Paradise Pags:', error.response ? error.response.data : error.message);
+        res.status(500).json({ error: 'Não foi possível gerar a cobrança PIX devido a um erro interno.' });
     }
 });
 
 
-// ROTA PARA O FRONTEND VERIFICAR O STATUS DO PAGAMENTO
+// ROTA PARA O FRONTEND VERIFICAR O STATUS DO PAGAMENTO PERIODICAMENTE
 app.get('/verificar-status-paradise/:hash', authenticateToken, async (req, res) => {
-    const { hash } = req.params;
-    const PARADISE_STATUS_URL = `https://multi.paradisepags.com/api/v1/check_status.php?hash=${hash}&_=${new Date().getTime()}`;
+    const { hash } = req.params; // Hash da transação vindo da URL
+    // URL da API de verificação de status, com timestamp para evitar cache
+    const PARADISE_STATUS_URL = `https://multi.paradisepags.com/api/v1/check_status.php?hash=${hash}&_=${Date.now()}`;
 
     try {
+        // Faz a chamada GET para a API de status
         const response = await axios.get(PARADISE_STATUS_URL, {
-            headers: { 'X-API-Key': PARADISE_API_TOKEN }
+            headers: { 'X-API-Key': PARADISE_API_TOKEN } // Chave secreta da API
         });
 
+        // Verifica se a resposta contém o status do pagamento
         if (response.data && response.data.payment_status) {
-            res.json({ payment_status: response.data.payment_status });
+            res.json({ payment_status: response.data.payment_status }); // Retorna 'paid', 'pending', etc.
         } else {
-            res.status(404).json({ error: 'Status não encontrado.' });
+            // Se o hash não foi encontrado ou a resposta é inválida
+            res.status(404).json({ error: 'Status do pagamento não encontrado para este hash.' });
         }
     } catch (error) {
-        console.error('Erro ao verificar status do pagamento:', error.response ? error.response.data : error.message);
-        res.status(500).json({ error: 'Erro ao consultar o gateway de pagamento.' });
+        // Se ocorreu um erro na comunicação com a API
+        console.error('Erro ao verificar status do pagamento Paradise:', error.response ? error.response.data : error.message);
+        res.status(error.response?.status || 500).json({ error: 'Erro ao consultar o status no gateway de pagamento.' });
     }
 });
 
 
-// --- ROTAS ANTIGAS (TRIBOPAY) - MANTIDAS PARA REFERÊNCIA ---
-
-/*
-app.post('/gerar-pix-tribopay', authenticateToken, async (req, res) => {
-    // ... código antigo ...
-});
-*/
-
-// ROTA DE WEBHOOK (ESSENCIAL)
+// ROTA DE WEBHOOK (PARA RECEBER CONFIRMAÇÕES DE PAGAMENTO DO GATEWAY)
 app.post('/webhook-gateway', async (req, res) => {
-    console.log('Webhook recebido:', req.body);
-    const { customer_email, product_hash, event_type, source } = req.body; // 'source' pode ajudar a diferenciar
+    console.log('Webhook recebido:', req.body); // Log para depuração
+    // Extrai dados relevantes do corpo do webhook (ajuste os nomes se necessário)
+    const { customer_email, product_hash, event_type } = req.body;
 
+    // Processa apenas eventos de compra aprovada
     if (event_type === 'purchase.approved') {
         try {
+            // Encontra o usuário no banco de dados pelo email
             const user = await prisma.user.findUnique({ where: { email: customer_email } });
             if (user) {
                 console.log(`Atualizando acesso para ${customer_email}, produto ${product_hash}`);
 
-                // Lógica de atualização de acesso baseada no product_hash
+                // --- LÓGICA DE ATUALIZAÇÃO DE ACESSO ---
+                // Atualiza os campos de acesso do usuário com base no produto comprado
                 switch (product_hash) {
                     // Planos
-                    case 'dig1p': // Plano Premium
+                    case 'dig1p': // Plano Premium (ID antigo da Tribopay)
                         await prisma.user.update({ where: { email: customer_email }, data: { plan: 'premium' } });
                         break;
-                    case 'tjxp0': // Plano Ultra
+                    case 'tjxp0': // Plano Ultra (ID antigo da Tribopay)
+                        // Plano Ultra concede todos os acessos
                         await prisma.user.update({ where: { email: customer_email }, data: { plan: 'ultra', hasLiveAccess: true, hasNinaAccess: true, hasWalletAccess: true } });
                         break;
                     // Compras Avulsas
-                    // O HASH DO PRODUTO 'Chatbot Nina' do código PHP é 'prod_0d6f903b6855c714'
-                    case 'prod_0d6f903b6855c714': // Bot Nina (Paradise Pags)
-                    case 'wunqzncl9v': // Bot Nina (Tribopay)
+                    case 'prod_0d6f903b6855c714': // Chatbot Nina (ID Paradise Pags)
+                    case 'wunqzncl9v': // Chatbot Nina (ID antigo da Tribopay)
                         await prisma.user.update({ where: { email: customer_email }, data: { hasNinaAccess: true } });
                         break;
-                    case 'z1xp3f2ayg': // Live Dr José Nakamura
+                    case 'prod_cb02db3516be7ede': // Live Dr José Nakamura (ID Paradise Pags - ATUALIZADO AQUI)
+                    case 'z1xp3f2ayg': // Live Dr José Nakamura (ID antigo da Tribopay)
                         await prisma.user.update({ where: { email: customer_email }, data: { hasLiveAccess: true } });
                         break;
-                    case 'wyghke8sf1': // Certificado
-                    case 'ta6jxnhmo2': // Carteirinha ABRATH
-                    case 'ogtsy3fs0o': // Frete PAC
-                    case 'hg4kajthaw': // Frete Express
+                    case 'wyghke8sf1': // Certificado (ID antigo da Tribopay)
+                    case 'ta6jxnhmo2': // Carteirinha ABRATH (ID antigo da Tribopay OU ID Paradise?)
+                    case 'ogtsy3fs0o': // Frete PAC (ID antigo da Tribopay OU ID Paradise?)
+                    case 'hg4kajthaw': // Frete Express (ID antigo da Tribopay OU ID Paradise?)
+                        // Assumindo que todos estes dão acesso à carteira/certificado
                         await prisma.user.update({ where: { email: customer_email }, data: { hasWalletAccess: true } });
                         break;
                     default:
-                        console.warn(`Hash de produto não reconhecido: ${product_hash}`);
+                        // Loga se um produto desconhecido for comprado
+                        console.warn(`Webhook: Hash de produto não reconhecido: ${product_hash} para ${customer_email}`);
                 }
+            } else {
+                 console.warn(`Webhook: Usuário com email ${customer_email} não encontrado no banco de dados.`);
             }
         } catch (error) {
             console.error('Erro ao processar o webhook:', error);
-            return res.status(500).send('Erro interno.');
+            // Retorna erro 500 para o gateway, indicando falha no processamento
+            return res.status(500).send('Erro interno ao processar webhook.');
         }
+    } else {
+        console.log(`Webhook: Evento ignorado: ${event_type}`);
     }
-    res.status(200).send('Webhook processado.');
+    // Responde ao gateway que o webhook foi recebido (mesmo que o evento seja ignorado)
+    res.status(200).send('Webhook recebido.');
 });
 
 
-// --- ROTAS ORIGINAIS (Módulos, Aulas, Progresso, Login, etc.) ---
-// O restante do seu código permanece aqui...
+// --- ROTAS ORIGINAIS (Módulos, Aulas, Progresso, Login, Auth, Certificado) ---
 
+// Busca todos os módulos com suas aulas
 app.get('/modulos', authenticateToken, async (req, res) => {
     try {
         const modulos = await prisma.modulo.findMany({
             include: {
-                aulas: {
-                    orderBy: {
-                        ordem: 'asc',
-                    },
-                },
+                aulas: { orderBy: { ordem: 'asc' } }, // Inclui aulas ordenadas
             },
-            orderBy: {
-                ordem: 'asc',
-            },
+            orderBy: { ordem: 'asc' }, // Ordena os módulos
         });
         res.json(modulos);
     } catch (error) {
+        console.error("Erro ao buscar módulos:", error);
         res.status(500).json({ error: 'Erro ao buscar módulos' });
     }
 });
 
+// Busca um módulo específico pelo ID com suas aulas
 app.get('/modulos/:id', authenticateToken, async (req, res) => {
     try {
         const { id } = req.params;
         const modulo = await prisma.modulo.findUnique({
             where: { id: parseInt(id) },
             include: {
-                aulas: {
-                    orderBy: {
-                        ordem: 'asc',
-                    },
-                },
+                aulas: { orderBy: { ordem: 'asc' } }, // Inclui aulas ordenadas
             },
         });
         if (modulo) {
@@ -232,10 +241,12 @@ app.get('/modulos/:id', authenticateToken, async (req, res) => {
             res.status(404).json({ error: 'Módulo não encontrado' });
         }
     } catch (error) {
+        console.error("Erro ao buscar módulo:", error);
         res.status(500).json({ error: 'Erro ao buscar módulo' });
     }
 });
 
+// Busca uma aula específica pelo ID
 app.get('/aulas/:id', authenticateToken, async (req, res) => {
     try {
         const { id } = req.params;
@@ -248,79 +259,79 @@ app.get('/aulas/:id', authenticateToken, async (req, res) => {
             res.status(404).json({ error: 'Aula não encontrada' });
         }
     } catch (error) {
+        console.error("Erro ao buscar aula:", error);
         res.status(500).json({ error: 'Erro ao buscar aula' });
     }
 });
 
+// Marca ou desmarca uma aula como concluída
 app.post('/aulas/concluir', authenticateToken, async (req, res) => {
     const { aulaId } = req.body;
     const userId = req.user.id;
     try {
+        // Verifica se já existe um registro de progresso para esta aula e usuário
         const progressoExistente = await prisma.progresso.findUnique({
-            where: {
-                userId_aulaId: {
-                    userId: userId,
-                    aulaId: aulaId,
-                },
-            },
+            where: { userId_aulaId: { userId, aulaId } },
         });
         if (progressoExistente) {
+            // Se existe, remove (desmarca)
             await prisma.progresso.delete({
-                where: {
-                    userId_aulaId: {
-                        userId: userId,
-                        aulaId: aulaId,
-                    },
-                },
+                where: { userId_aulaId: { userId, aulaId } },
             });
             res.json({ status: 'desmarcada' });
         } else {
+            // Se não existe, cria (marca)
             const novoProgresso = await prisma.progresso.create({
-                data: {
-                    userId: userId,
-                    aulaId: aulaId,
-                    concluida: true,
-                },
+                data: { userId, aulaId, concluida: true },
             });
             res.json({ status: 'marcada', progresso: novoProgresso });
         }
     } catch (error) {
         console.error("Erro ao alternar progresso da aula:", error);
-        res.status(500).json({ error: 'Erro ao marcar/desmarcar aula como concluída' });
+        res.status(500).json({ error: 'Erro ao marcar/desmarcar aula' });
     }
 });
 
+// Busca os IDs de todas as aulas concluídas pelo usuário
 app.get('/progresso', authenticateToken, async (req, res) => {
     const userId = req.user.id;
     try {
         const progresso = await prisma.progresso.findMany({
-            where: { userId: userId, concluida: true },
-            select: { aulaId: true },
+            where: { userId, concluida: true },
+            select: { aulaId: true }, // Seleciona apenas o ID da aula
         });
-        res.json(progresso.map((p) => p.aulaId));
+        res.json(progresso.map((p) => p.aulaId)); // Retorna um array de IDs
     } catch (error) {
+        console.error("Erro ao buscar progresso:", error);
         res.status(500).json({ error: 'Erro ao buscar progresso' });
     }
 });
 
+// Calcula e retorna a porcentagem de progresso para cada módulo
 app.get('/progresso-modulos', authenticateToken, async (req, res) => {
     const userId = req.user.id;
     try {
+        // Busca todos os módulos e os IDs de suas aulas
         const modulos = await prisma.modulo.findMany({
             include: { aulas: { select: { id: true } } },
         });
+        // Busca os IDs de todas as aulas concluídas pelo usuário
         const progressoAulas = await prisma.progresso.findMany({
-            where: { userId: userId, concluida: true },
+            where: { userId, concluida: true },
             select: { aulaId: true },
         });
         const aulasConcluidasIds = new Set(progressoAulas.map(p => p.aulaId));
+
         const progressoModulos = {};
         modulos.forEach(modulo => {
             if (modulo.aulas.length === 0) {
+                // Módulo sem aulas é considerado 100% concluído
                 progressoModulos[modulo.id] = 100;
                 return;
             }
+            // Conta quantas aulas do módulo estão no conjunto de aulas concluídas
             const aulasConcluidasNoModulo = modulo.aulas.filter(aula => aulasConcluidasIds.has(aula.id)).length;
+            // Calcula a porcentagem
             progressoModulos[modulo.id] = Math.round((aulasConcluidasNoModulo / modulo.aulas.length) * 100);
         });
         res.json(progressoModulos);
@@ -330,15 +341,18 @@ app.get('/progresso-modulos', authenticateToken, async (req, res) => {
     }
 });
 
+// Rota de Login com Email e Senha
 app.post('/login', async (req, res) => {
     const { email, password } = req.body;
     try {
         const user = await prisma.user.findUnique({ where: { email } });
+        // Verifica se o usuário existe, tem senha e se a senha está correta
         if (user && user.password && await bcrypt.compare(password, user.password)) {
-            const accessToken = jwt.sign({ id: user.id, email: user.email, name: user.name }, JWT_SECRET, { expiresIn: '1d' });
-            res.json({ accessToken, userName: user.name });
+            // Gera um token JWT com ID, email e nome do usuário
+            const accessToken = jwt.sign({ id: user.id, email: user.email, name: user.name }, JWT_SECRET, { expiresIn: '1d' }); // Expira em 1 dia
+            res.json({ accessToken, userName: user.name }); // Retorna o token e o nome do usuário
         } else {
-            res.status(401).send('Email ou senha incorretos');
+            res.status(401).send('Email ou senha incorretos'); // Não autorizado
         }
     } catch (error) {
         console.error("Erro no login:", error);
@@ -346,102 +360,147 @@ app.post('/login', async (req, res) => {
     }
 });
 
-
+// Rota para gerar um Link Mágico para login sem senha
 app.post('/auth/magic-link', async (req, res) => {
     const { email } = req.body;
     console.log('Recebido pedido para /auth/magic-link com o email:', email);
     try {
+        // Cria ou encontra o usuário pelo email
         const user = await prisma.user.upsert({
             where: { email },
             update: {},
-            create: { email },
+            // Se o usuário não existir, cria com email e um nome padrão (parte antes do @)
+            create: { email, name: email.split('@')[0] },
         });
+        // Gera um token único e com tempo de expiração para o link mágico
         const magicLink = await prisma.magicLink.create({
             data: {
                 userId: user.id,
-                token: `${Date.now()}${Math.random()}`.replace(/\./g, ''),
+                token: `${Date.now()}${Math.random()}`.replace(/\./g, ''), // Token simples
                 email: email,
-                expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+                expiresAt: new Date(Date.now() + 15 * 60 * 1000), // Expira em 15 minutos
             },
         });
 
+        // Monta a URL do frontend para onde o link mágico deve redirecionar
         const frontendUrl = process.env.NODE_ENV === 'production'
-            ? process.env.FRONTEND_URL
-            : 'http://localhost:3000';
+            ? process.env.FRONTEND_URL // Usa a URL de produção definida nas variáveis de ambiente
+            : 'http://localhost:3000'; // Ou localhost para desenvolvimento
         const url = `${frontendUrl}/auth/callback?token=${magicLink.token}`;
 
+        // Loga o link no console (para testes) - AQUI DEVE ENTRAR A LÓGICA DE ENVIO DE EMAIL REAL
         console.log(`\n✨ LINK MÁGICO (PARA TESTES):\n${url}\n`);
-        res.status(200).json({ message: 'Link mágico gerado e pronto para envio.' });
+
+        // Idealmente, aqui você enviaria um email para o usuário com a 'url'
+
+        res.status(200).json({ message: 'Link mágico gerado. Verifique seu email.' });
     } catch (error) {
-        console.error(error);
+        console.error("Erro ao processar magic link:", error);
         res.status(500).json({ error: 'Erro ao processar solicitação de link mágico' });
     }
 });
 
+// Rota para verificar o token do Link Mágico
 app.post('/auth/verify', async (req, res) => {
     const { token } = req.body;
     try {
+        // Busca o link mágico no banco de dados, incluindo os dados do usuário associado
         const magicLink = await prisma.magicLink.findUnique({
             where: { token },
             include: { user: true },
         });
+        // Verifica se o link existe e não expirou
         if (!magicLink || new Date() > new Date(magicLink.expiresAt)) {
+            // Se expirou ou não existe, apaga do banco (se existir) e retorna erro
             if (magicLink) await prisma.magicLink.delete({ where: { token } });
             return res.status(400).json({ error: 'Link mágico inválido ou expirado' });
         }
-        const userToken = jwt.sign({ id: magicLink.userId, email: magicLink.user.email }, JWT_SECRET, { expiresIn: '7d' });
+        // Gera um token JWT de longa duração para o usuário
+        const userToken = jwt.sign({ id: magicLink.userId, email: magicLink.user.email, name: magicLink.user.name }, JWT_SECRET, { expiresIn: '7d' }); // Expira em 7 dias
+        // Apaga o link mágico do banco após o uso
         await prisma.magicLink.delete({ where: { token } });
+        // Retorna o token JWT, nome e ID do usuário para o frontend
         res.json({ token: userToken, userName: magicLink.user.name, userId: magicLink.user.id });
     } catch (error) {
-        console.error(error);
+        console.error("Erro ao verificar magic link:", error);
         res.status(500).json({ error: 'Erro ao verificar o link mágico' });
     }
 });
 
+// Rota para gerar o certificado em PDF (usando um script Python)
 app.post('/gerar-certificado', authenticateToken, async (req, res) => {
     const userId = req.user.id;
+    // O nome seguro (sem caracteres especiais) vem do frontend
     const { safeStudentName } = req.body;
+    if (!safeStudentName) {
+         return res.status(400).json({ error: 'Nome do aluno é necessário.' });
+    }
+
     try {
         const user = await prisma.user.findUnique({ where: { id: userId } });
         if (!user) {
             return res.status(404).json({ error: 'Usuário não encontrado.' });
         }
+        // Define os caminhos para o script Python e onde salvar o PDF
         const certificadoDir = path.join(__dirname, 'gerador_certificado', 'certificados');
         const certificadoPath = path.join(certificadoDir, `${safeStudentName}.pdf`);
         const scriptPath = path.join(__dirname, 'gerador_certificado', 'script.py');
+        const imgPath = `file:///${path.join(__dirname, 'gerador_certificado', 'img', 'ervas.webp').replace(/\\/g, '/')}`; // Caminho da imagem de fundo
+
+        // Argumentos para passar ao script Python
         const args = [
             scriptPath,
-            user.name || 'Nome do Aluno',
-            'Formação Herbalista Pro',
-            new Date().toLocaleDateString('pt-BR'),
-            `file:///${path.join(__dirname, 'gerador_certificado', 'img', 'ervas.webp').replace(/\\/g, '/')}`,
-            certificadoPath
+            user.name || 'Nome Indefinido', // Nome do aluno (ou fallback)
+            'Formação Herbalista Pro',      // Nome do curso
+            new Date().toLocaleDateString('pt-BR'), // Data de emissão
+            imgPath,                        // Caminho da imagem de fundo
+            certificadoPath                 // Caminho onde salvar o PDF
         ];
+
+        // Executa o script Python
+        console.log('Executando script Python:', args);
         await execFileAsync('python', args);
-        res.sendFile(certificadoPath);
+        console.log('Script Python concluído. Enviando arquivo:', certificadoPath);
+
+        // Envia o arquivo PDF gerado como resposta
+        res.sendFile(certificadoPath, (err) => {
+            if (err) {
+                console.error("Erro ao enviar arquivo de certificado:", err);
+                // Não envia status 500 aqui se headers já foram enviados
+                // Apenas loga o erro.
+            } else {
+                 console.log("Certificado enviado com sucesso.");
+                 // Opcional: remover o arquivo após o envio?
+                 // fs.unlink(certificadoPath, (unlinkErr) => { ... });
+            }
+        });
+
     } catch (error) {
         console.error('Erro ao gerar certificado:', error);
-        res.status(500).send('Erro ao gerar o certificado.');
+        // Só envia status 500 se nenhum arquivo começou a ser enviado
+        if (!res.headersSent) {
+            res.status(500).send('Erro ao gerar o certificado.');
+        }
     }
 });
 
+// Rota para buscar os dados básicos do usuário logado
 app.get('/me', authenticateToken, async (req, res) => {
     try {
         const user = await prisma.user.findUnique({
             where: { id: req.user.id },
-            select: {
-                id: true, email: true, name: true, plan: true,
-                hasLiveAccess: true, hasNinaAccess: true, hasWalletAccess: true
-            }
+            // Seleciona apenas os campos necessários para o frontend
+            select: { id: true, email: true, name: true, plan: true, hasLiveAccess: true, hasNinaAccess: true, hasWalletAccess: true }
         });
         if (!user) return res.status(404).json({ error: 'Utilizador não encontrado' });
         res.json(user);
     } catch (error) {
+        console.error("Erro ao buscar dados do usuário (/me):", error);
         res.status(500).json({ error: 'Erro ao buscar dados do utilizador.' });
     }
 });
 
-
+// Inicia o servidor
 app.listen(PORT, () => {
     console.log(`Servidor rodando na porta ${PORT}`);
 });
