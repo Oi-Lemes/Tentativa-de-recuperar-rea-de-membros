@@ -18,38 +18,47 @@ interface PixData {
 // 2. Mapeamento dos Hashes de Produto (do seu server.js) e Preços
 // Usei os preços baseados nos seus planos, ajuste se necessário.
 // 2. Mapeamento dos Hashes de Produto (do seu server.js) e Preços
+// frontend/src/app/(admin)/dashboard/page.tsx
+
+// ... (imports) ...
+
+// 2. Mapeamento dos Hashes de Produto ATUALIZADO
 const PRODUCTS = {
   premium: {
-    hash: 'dig1p', // Plano Premium (Ainda usa hash antigo? Se sim, ok. Se migrou, atualize)
+    hash: 'dig1p', // Mantenha se ainda for este, ou atualize se migrou
     amount: 9700,
     title: 'Plano Premium'
   },
   ultra: {
-    hash: 'tjxp0', // Plano Ultra (Ainda usa hash antigo? Se sim, ok. Se migrou, atualize)
+    hash: 'tjxp0', // Mantenha se ainda for este, ou atualize se migrou
     amount: 19700,
     title: 'Plano Ultra'
   },
-  live: { // <<< CORRIGIDO AQUI
-    hash: 'prod_cb02db3516be7ede', // Live Dr José Nakamura (NOVO HASH Paradise Pags)
-    amount: 6700, // Valor correto do PHP
-    title: 'Dr José Nakamura' // Título correto do PHP
+  live: {
+    hash: 'prod_cb02db3516be7ede', // Live Dr José Nakamura (Paradise)
+    amount: 6700,
+    title: 'Dr José Nakamura'
   },
   nina: {
     hash: 'prod_0d6f903b6855c714', // Chatbot Nina (Paradise)
     amount: 2704,
     title: 'Acesso ao Chatbot Nina'
   },
+  // ▼▼▼ ATUALIZADO AQUI ▼▼▼
   certificate: {
-    hash: 'wyghke8sf1', // Certificado (Ainda usa hash antigo? Se sim, ok. Se migrou, atualize)
-    amount: 1990,
-    title: 'Taxa de Emissão do Certificado'
+    hash: 'prod_0bc162e2175f527f', // Certificado (Paradise)
+    amount: 1490,                 // Valor do PHP (R$ 14,90)
+    title: 'Certificado'           // Título do PHP
   },
   wallet: {
-    hash: 'ta6jxnhmo2', // Carteirinha ABRATH (Ainda usa hash antigo? Se sim, ok. Se migrou, atualize)
-    amount: 1990,
-    title: 'Taxa de Emissão da Carteira'
+    hash: 'prod_375f8ceb7a4cffcc', // Carteira ABRATH (Paradise)
+    amount: 2700,                 // Valor do PHP (R$ 27,00)
+    title: 'Carteira ABRATH'       // Título do PHP
   }
+  // ▲▲▲ FIM DA ATUALIZAÇÃO ▲▲▲
 };
+
+// ... (resto do componente DashboardPage) ...
 
 // --- Componente ProgressCircle (Mantido) ---
 const ProgressCircle = ({ percentage }: { percentage: number }) => {

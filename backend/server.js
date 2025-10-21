@@ -168,35 +168,43 @@ app.post('/webhook-gateway', async (req, res) => {
 
                 // --- LÓGICA DE ATUALIZAÇÃO DE ACESSO ---
                 // Atualiza os campos de acesso do usuário com base no produto comprado
+                // Dentro da rota /webhook-gateway no backend/server.js
+
+// ... (código anterior do webhook) ...
+
                 switch (product_hash) {
-                    // Planos
-                    case 'dig1p': // Plano Premium (ID antigo da Tribopay)
+                    // Planos (verificar se ainda são válidos ou migraram)
+                    case 'dig1p': // Plano Premium (Antigo)
                         await prisma.user.update({ where: { email: customer_email }, data: { plan: 'premium' } });
                         break;
-                    case 'tjxp0': // Plano Ultra (ID antigo da Tribopay)
-                        // Plano Ultra concede todos os acessos
+                    case 'tjxp0': // Plano Ultra (Antigo)
                         await prisma.user.update({ where: { email: customer_email }, data: { plan: 'ultra', hasLiveAccess: true, hasNinaAccess: true, hasWalletAccess: true } });
                         break;
                     // Compras Avulsas
-                    case 'prod_0d6f903b6855c714': // Chatbot Nina (ID Paradise Pags)
-                    case 'wunqzncl9v': // Chatbot Nina (ID antigo da Tribopay)
+                    case 'prod_0d6f903b6855c714': // Chatbot Nina (Paradise)
+                    case 'wunqzncl9v': // Chatbot Nina (Antigo)
                         await prisma.user.update({ where: { email: customer_email }, data: { hasNinaAccess: true } });
                         break;
-                    case 'prod_cb02db3516be7ede': // Live Dr José Nakamura (ID Paradise Pags - ATUALIZADO AQUI)
-                    case 'z1xp3f2ayg': // Live Dr José Nakamura (ID antigo da Tribopay)
+                    case 'prod_cb02db3516be7ede': // Live Dr José Nakamura (Paradise)
+                    case 'z1xp3f2ayg': // Live Dr José Nakamura (Antigo)
                         await prisma.user.update({ where: { email: customer_email }, data: { hasLiveAccess: true } });
                         break;
-                    case 'wyghke8sf1': // Certificado (ID antigo da Tribopay)
-                    case 'ta6jxnhmo2': // Carteirinha ABRATH (ID antigo da Tribopay OU ID Paradise?)
-                    case 'ogtsy3fs0o': // Frete PAC (ID antigo da Tribopay OU ID Paradise?)
-                    case 'hg4kajthaw': // Frete Express (ID antigo da Tribopay OU ID Paradise?)
-                        // Assumindo que todos estes dão acesso à carteira/certificado
+                    // ▼▼▼ ADICIONADO/ATUALIZADO AQUI ▼▼▼
+                    case 'prod_0bc162e2175f527f': // Certificado (Paradise)
+                    case 'wyghke8sf1': // Certificado (Antigo)
+                    case 'prod_375f8ceb7a4cffcc': // Carteira ABRATH (Paradise)
+                    case 'ta6jxnhmo2': // Carteirinha ABRATH (Antigo)
+                    case 'ogtsy3fs0o': // Frete PAC (Antigo OU Paradise?)
+                    case 'hg4kajthaw': // Frete Express (Antigo OU Paradise?)
+                        // Assumindo que todos estes dão o mesmo acesso 'hasWalletAccess'
                         await prisma.user.update({ where: { email: customer_email }, data: { hasWalletAccess: true } });
                         break;
+                    // ▲▲▲ FIM DA ATUALIZAÇÃO ▲▲▲
                     default:
-                        // Loga se um produto desconhecido for comprado
                         console.warn(`Webhook: Hash de produto não reconhecido: ${product_hash} para ${customer_email}`);
                 }
+
+// ... (resto do código do webhook) ...
             } else {
                  console.warn(`Webhook: Usuário com email ${customer_email} não encontrado no banco de dados.`);
             }
