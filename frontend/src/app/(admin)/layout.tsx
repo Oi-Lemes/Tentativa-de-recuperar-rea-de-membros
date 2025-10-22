@@ -4,8 +4,9 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import ChatbotNina from '@/components/ChatbotNina'; // CORREÇÃO APLICADA AQUI
+import ChatbotNina from '@/components/ChatbotNina'; 
 import { UserProvider, useUser } from '@/contexts/UserContext';
+import { DevPlanSwitcher } from '@/components/DevPlanSwitcher'; 
 
 // --- Componente Interno para a Sidebar e Conteúdo ---
 const LayoutWithSidebar = ({ children }: { children: React.ReactNode }) => {
@@ -28,6 +29,8 @@ const LayoutWithSidebar = ({ children }: { children: React.ReactNode }) => {
     router.push('/');
   }, [router]);
 
+  // ▼▼▼ ESTA É A FUNÇÃO CORRIGIDA ▼▼▼
+  // Ela soma o total de AULAS e o total de AULAS CONCLUÍDAS
   const fetchProgressData = useCallback(async () => {
     const token = localStorage.getItem('token');
     if (!token) return;
@@ -45,18 +48,45 @@ const LayoutWithSidebar = ({ children }: { children: React.ReactNode }) => {
       }
 
       const modulos = await modulosRes.json();
+      // aulasConcluidasIds é um array de números, ex: [1, 5, 12]
       const aulasConcluidasIds = await progressoRes.json();
+      // 1. Criar um Set para performance (verificação O(1))
+      const aulasConcluidasIdSet = new Set(aulasConcluidasIds);
+
+      // 2. Filtrar módulos que não são de certificado
       const modulosPrincipais = modulos.filter((m: any) => m.nome && !m.nome.toLowerCase().includes('certificado'));
-      const totalAulas = modulosPrincipais.reduce((acc: number, modulo: any) => acc + (modulo.aulas?.length || 0), 0);
+
+      let totalAulas = 0;
+      let totalConcluidas = 0;
+
+      // 3. Iterar pelos módulos principais para somar totais
+      for (const modulo of modulosPrincipais) {
+        // Verifica se o módulo tem aulas e se é um array
+        if (Array.isArray(modulo.aulas) && modulo.aulas.length > 0) {
+          
+          // Itera por CADA AULA individualmente
+          for (const aula of modulo.aulas) {
+            // Conta +1 para o total de aulas
+            totalAulas++; 
+            
+            // Verifica se a aula específica foi concluída
+            if (aula && aula.id && aulasConcluidasIdSet.has(aula.id)) {
+              // Conta +1 para o total de concluídas
+              totalConcluidas++;
+            }
+          }
+        }
+      }
       
-      const aulasPrincipais = modulosPrincipais.flatMap((m: any) => m.aulas || []);
-      const totalConcluidas = aulasPrincipais.filter((a: any) => aulasConcluidasIds.includes(a.id)).length;
-      
+      // 4. Definir o progresso total (ex: 10 concluídas / 100 totais) * 100
       setProgressoTotal(totalAulas > 0 ? (totalConcluidas / totalAulas) * 100 : 0);
+
     } catch (error) {
       console.error("Erro ao buscar progresso total:", error);
     }
   }, [handleLogout]);
+  // ▲▲▲ FIM DA FUNÇÃO CORRIGIDA ▲▲▲
+
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -67,6 +97,7 @@ const LayoutWithSidebar = ({ children }: { children: React.ReactNode }) => {
     }
 
     const handleStorageChange = (event: StorageEvent) => {
+        // Recalcula o progresso se uma aula for concluída em outra aba
         if(event.key === 'aula_concluida' || event.key === null) {
             fetchProgressData();
         }
@@ -130,6 +161,7 @@ const LayoutWithSidebar = ({ children }: { children: React.ReactNode }) => {
           <Link href="/dashboard" onClick={() => window.innerWidth < 768 && setIsSidebarOpen(false)} className="text-lg text-black hover:text-gray-700 p-2 rounded-md hover:bg-white/30">
             Início / Módulos
           </Link>
+          {/* Você pode adicionar mais links aqui, condicionados ao 'user.plan' etc. */}
         </nav>
         <button onClick={handleLogout} className="mt-auto w-full px-4 py-2 font-bold text-white bg-red-600 rounded-md hover:bg-red-700">
           Sair
@@ -161,6 +193,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <UserProvider>
       <LayoutWithSidebar>{children}</LayoutWithSidebar>
+      
+      {/* O Switcher de planos para teste */}
+      <DevPlanSwitcher />
     </UserProvider>
   );
 }

@@ -5,15 +5,9 @@ import { useState, useRef, useEffect, FormEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import { useUser } from '@/contexts/UserContext';
-import { PixModal } from '@/components/PixModal'; // Corrigido para o novo modal
+// --- REMOVIDO: import { PixModal } from '@/components/PixModal'; ---
 
-// --- Interface para os dados do PIX que esperamos do backend ---
-interface PixData {
-  pix_qr_code: string;
-  amount_paid: number;
-  expiration_date: string;
-  hash: string;
-}
+// --- REMOVIDO: Interface PixData ---
 
 // --- Ícones (Mantidos do seu código original) ---
 const MicrophoneIcon = ({ isRecording }: { isRecording: boolean }) => (
@@ -61,12 +55,8 @@ export default function ChatbotNina() {
     const [isLoading, setIsLoading] = useState(false);
     const [isRecording, setIsRecording] = useState(false);
     
-    // --- ESTADOS ATUALIZADOS PARA O MODAL PIX ---
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [pixData, setPixData] = useState<PixData | null>(null);
-    const [isLoadingPix, setIsLoadingPix] = useState(false);
-    const [paymentError, setPaymentError] = useState('');
-
+    // --- ESTADOS DE PAGAMENTO REMOVIDOS ---
+    
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
     const chatContainerRef = useRef<HTMLDivElement | null>(null);
@@ -77,61 +67,9 @@ export default function ChatbotNina() {
         }
     }, [messages, isLoading]);
     
-    // --- FUNÇÃO DE PAGAMENTO ATUALIZADA PARA O PARADISE PAGS ---
-    const handlePayment = async () => {
-        if (!user) {
-            alert("Você precisa estar logado para comprar. Por favor, recarregue a página.");
-            return;
-        }
-        setIsLoadingPix(true);
-        setPaymentError('');
-        const token = localStorage.getItem('token');
+    // --- FUNÇÃO DE PAGAMENTO (handlePayment) REMOVIDA ---
 
-        // Informações do produto do seu código PHP
-        const paymentPayload = {
-            productHash: 'prod_0d6f903b6855c714',
-            baseAmount: 2704, // Valor em centavos
-            productTitle: 'Chatbot Nina',
-            checkoutUrl: window.location.href
-        };
-
-        try {
-            const backendUrl = process.env.NEXT_PUBLIC_API_URL;
-            const response = await fetch(`${backendUrl}/gerar-pix-paradise`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify(paymentPayload),
-            });
-
-            const result = await response.json();
-
-            if (!response.ok) {
-                throw new Error(result.error || 'Falha ao gerar o PIX a partir do backend.');
-            }
-            
-            setPixData({
-                pix_qr_code: result.pix.pix_qr_code,
-                amount_paid: result.amount_paid,
-                expiration_date: result.pix.expiration_date,
-                hash: result.hash
-            });
-            setIsModalOpen(true);
-
-        } catch (error) {
-            console.error(error);
-            setPaymentError(error instanceof Error ? error.message : "Ocorreu um erro desconhecido.");
-        } finally {
-            setIsLoadingPix(false);
-        }
-    };
-
-    // --- NOVA FUNÇÃO CHAMADA PELO MODAL QUANDO O PAGAMENTO É APROVADO ---
-    const handlePaymentSuccess = () => {
-        setIsModalOpen(false);
-        refetchUser(); // Atualiza os dados do usuário para refletir o novo acesso
-        alert('Pagamento aprovado! Seu acesso à Nina foi liberado.');
-        setIsOpen(true); // Abre o chat
-    };
+    // --- FUNÇÃO DE SUCESSO DE PAGAMENTO (handlePaymentSuccess) REMOVIDA ---
 
     // Funções originais (playAudio, handleClearChat, etc.)
     const playAudio = (text: string) => {
@@ -232,7 +170,7 @@ export default function ChatbotNina() {
         }
     };
 
-    const isUnlocked = user?.plan === 'ultra' || user?.hasNinaAccess;
+    // --- VARIÁVEL isUnlocked REMOVIDA ---
     
     return (
         <>
@@ -264,11 +202,12 @@ export default function ChatbotNina() {
                             </div>
                         </div>
 
+                        {/* --- LÓGICA DE RENDERIZAÇÃO SIMPLIFICADA --- */}
                         {userLoading ? (
                             <div className="flex-1 flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-500"></div></div>
-                        ) : isUnlocked ? (
+                        ) : (
                             <>
-                                {/* Interface do Chat para Utilizadores com Acesso */}
+                                {/* Interface do Chat (Agora sempre visível) */}
                                 <div ref={chatContainerRef} className="flex-1 p-4 space-y-4 overflow-y-auto">
                                     {messages.length === 0 && (
                                         <div className="flex flex-col items-center justify-center h-full text-center text-gray-500 dark:text-gray-400 space-y-4">
@@ -305,36 +244,13 @@ export default function ChatbotNina() {
                                     <button type="submit" disabled={!input.trim() || isLoading || isRecording} className="ml-2 p-2.5 rounded-full bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-300 dark:disabled:bg-gray-500 transition-colors"><SendIcon /></button>
                                 </form>
                             </>
-                        ) : (
-                            // Ecrã de Bloqueio para o novo Gateway
-                            <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-                                <img src="/avatar-nina.png" alt="Nina" className="w-20 h-20 rounded-full mb-4 opacity-80" />
-                                <h4 className="font-bold text-lg text-gray-800 dark:text-white">Acesso Exclusivo à Nina</h4>
-                                <p className="text-gray-600 dark:text-gray-300 mt-2 max-w-xs">
-                                    A assistente herbalista Nina é um recurso premium. Libere seu acesso para começar a usar.
-                                </p>
-                                <button
-                                    onClick={handlePayment}
-                                    disabled={isLoadingPix}
-                                    className="mt-6 w-full max-w-xs px-4 py-3 font-bold text-white bg-indigo-600 rounded-md hover:bg-indigo-700 transition-colors disabled:bg-indigo-400"
-                                >
-                                    {isLoadingPix ? 'Gerando PIX...' : 'Liberar Acesso Vitalício (R$ 27,04)'}
-                                </button>
-                                {paymentError && <p className="text-red-500 text-sm mt-2">{paymentError}</p>}
-                            </div>
                         )}
+                        {/* --- ECRÃ DE BLOQUEIO REMOVIDO --- */}
                     </motion.div>
                 )}
             </AnimatePresence>
 
-            {/* --- RENDERIZAÇÃO CORRETA DO MODAL --- */}
-            {isModalOpen && pixData && (
-                <PixModal 
-                    pixData={pixData}
-                    onClose={() => setIsModalOpen(false)} 
-                    onPaymentSuccess={handlePaymentSuccess}
-                />
-            )}
+            {/* --- RENDERIZAÇÃO DO MODAL PIX REMOVIDA --- */}
         </>
     );
 }

@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react';
 import { useUser } from '@/contexts/UserContext';
 import { PixModal } from '@/components/PixModal';
+import { useRouter } from 'next/navigation'; // --- ALTERAÇÃO 1: Importar o useRouter
 
 // Interface PixData
 interface PixData {
@@ -13,40 +14,29 @@ interface PixData {
   hash: string;
 }
 
-// Mapeamento ATUALIZADO dos Produtos e Preços
-// frontend/src/app/(admin)/carteira/page.tsx
-
-// ... (imports) ...
-
 // Mapeamento FINAL dos Produtos e Preços
 const PRODUCTS = {
-  walletAccess: { // Taxa de emissão da carteira
-    hash: 'prod_375f8ceb7a4cffcc', // Hash da "Carteira ABRATH" (Paradise)
-    amount: 2700,                 // Valor do PHP (R$ 27,00)
+  walletAccess: { 
+    hash: 'prod_375f8ceb7a4cffcc', 
+    amount: 2700,                 
     title: 'Taxa de Emissão da Carteira ABRATH'
   },
-  // ▼▼▼ ATUALIZADO AQUI ▼▼▼
   pac: {
-    hash: 'prod_3aeba29f077583c1', // Hash do PHP (CONFIRMAR SE É O MESMO DO EXPRESS)
-    amount: 990,                  // Valor do PHP (R$ 9,90)
-    title: 'Frete PAC'            // Título ajustado
+    hash: 'prod_3aeba29f077583c1', 
+    amount: 990,                  
+    title: 'Frete PAC'            
   },
   express: {
-    hash: 'prod_3aeba29f077583c1', // Hash do PHP
-    amount: 1490,                 // Valor do PHP (R$ 14,90)
-    title: 'Frete Express'        // Título ajustado
+    hash: 'prod_3aeba29f077583c1', 
+    amount: 1490,                 
+    title: 'Frete Express'        
   }
-  // ▲▲▲ FIM DA ATUALIZAÇÃO ▲▲▲
 };
-
-// ... (resto do componente CarteiraPage) ...
-// !! IMPORTANTE !!: Se os produtos de FRETE (PAC e Express) também foram migrados
-// para a Paradise Pags, você PRECISA substituir os hashes 'ogtsy...' e 'hg4k...'
-// pelos novos hashes corretos da Paradise Pags aqui.
 
 
 export default function CarteiraPage() {
   const { user, loading: userLoading, refetchUser } = useUser();
+  const router = useRouter(); // --- ALTERAÇÃO 2: Inicializar o useRouter
 
   const [cep, setCep] = useState('');
   const [address, setAddress] = useState({ street: '', number: '', neighborhood: '', city: '', state: '' });
@@ -59,16 +49,30 @@ export default function CarteiraPage() {
   const [pixData, setPixData] = useState<PixData | null>(null);
   const [isLoadingPix, setIsLoadingPix] = useState(false);
   const [paymentError, setPaymentError] = useState('');
-  // Guarda qual produto está sendo pago (taxa ou frete)
   const [productBeingPaid, setProductBeingPaid] = useState<'walletAccess' | 'pac' | 'express' | null>(null);
 
 
+  // --- ALTERAÇÃO 3: Adicionar useEffect para redirecionamento ---
+  useEffect(() => {
+    // Verifica se a condição da "Página de Sucesso" (Caso 1) está ativa
+    if (user?.hasWalletAccess && user.plan !== 'ultra') {
+      
+      // Inicia o temporizador
+      const timer = setTimeout(() => {
+        router.push('/dashboard'); // Redireciona para os módulos
+      }, 7000); // 7000ms = 7 segundos
+
+      // Função de limpeza: se o usuário sair da página, cancela o timer
+      return () => clearTimeout(timer);
+    }
+  }, [user, router]); // O hook depende do 'user' (para saber se o pagamento foi feito) e do 'router'
+
+
   const handleCepChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    // ... (função handleCepChange inalterada) ...
     const newCep = e.target.value;
     setCep(newCep);
     if (newCep.length !== 8) {
-        setAddress({ street: '', number: '', neighborhood: '', city: '', state: '' }); // Limpa se CEP incompleto
+        setAddress({ street: '', number: '', neighborhood: '', city: '', state: '' });
         return;
     };
 
@@ -80,21 +84,20 @@ export default function CarteiraPage() {
       const data = await response.json();
       if (data.erro) throw new Error('CEP não encontrado.');
       setAddress({
-        street: data.logouro || '',
-        number: '', // Número é preenchido pelo usuário
+        street: data.logradouro || '', // Bug da rua corrigido
+        number: '',
         neighborhood: data.bairro || '',
         city: data.localidade || '',
         state: data.uf || ''
       });
     } catch (err: any) {
       setError(err.message);
-      setAddress({ street: '', number: '', neighborhood: '', city: '', state: '' }); // Limpa em caso de erro
+      setAddress({ street: '', number: '', neighborhood: '', city: '', state: '' }); 
     } finally {
       setLoadingCep(false);
     }
   };
 
-  // Função para abrir o PIX Modal (para qualquer produto)
   const handleOpenPixModal = async (productKey: keyof typeof PRODUCTS) => {
     const product = PRODUCTS[productKey];
      if (!user || !product) {
@@ -103,7 +106,7 @@ export default function CarteiraPage() {
     }
     setIsLoadingPix(true);
     setPaymentError('');
-    setProductBeingPaid(productKey); // Guarda qual produto está sendo pago
+    setProductBeingPaid(productKey);
     const token = localStorage.getItem('token');
 
     const paymentPayload = {
@@ -123,7 +126,6 @@ export default function CarteiraPage() {
 
       const result = await response.json();
       if (!response.ok) {
-           // Log detalhado do erro vindo do backend
            console.error("Erro ao gerar PIX:", result);
            throw new Error(result.error || `Falha ao gerar o PIX (${response.status})`);
       }
@@ -138,7 +140,7 @@ export default function CarteiraPage() {
     } catch (error) {
       console.error(error);
       setPaymentError(error instanceof Error ? error.message : "Ocorreu um erro desconhecido ao gerar o PIX.");
-      setProductBeingPaid(null); // Limpa se deu erro
+      setProductBeingPaid(null);
     } finally {
       setIsLoadingPix(false);
     }
@@ -147,13 +149,15 @@ export default function CarteiraPage() {
   // Callback de sucesso do Modal
   const handlePaymentSuccess = () => {
     setIsModalOpen(false);
-    refetchUser(); // Atualiza dados do usuário
-    // Mensagem específica dependendo do que foi pago
-    if(productBeingPaid === 'walletAccess') {
-        alert('Pagamento da taxa confirmado! Agora preencha os dados de entrega e pague o frete.');
-    } else if (productBeingPaid === 'pac' || productBeingPaid === 'express') {
-        alert('Pagamento do frete confirmado! Sua solicitação foi registrada.');
-    }
+    refetchUser(); // Atualiza dados do usuário (isso vai disparar o re-render e o useEffect)
+    
+    // --- ALTERAÇÃO 4: Remover os alerts daqui ---
+    // if(productBeingPaid === 'walletAccess') {
+    //     alert('Pagamento da taxa confirmado! Agora preencha os dados de entrega e pague o frete.');
+    // } else if (productBeingPaid === 'pac' || productBeingPaid === 'express') {
+    //     alert('Pagamento do frete confirmado! Sua solicitação foi registrada.');
+    // }
+
     setProductBeingPaid(null); // Limpa o estado
   };
 
@@ -164,7 +168,6 @@ export default function CarteiraPage() {
       alert('Por favor, selecione uma opção de entrega.');
       return;
     }
-    // Verifica se todos os campos de endereço necessários foram preenchidos
     if (!cep || !address.street || !address.number || !address.neighborhood || !address.city || !address.state || !recipientName) {
         alert('Por favor, preencha todos os dados de entrega.');
         return;
@@ -185,12 +188,20 @@ export default function CarteiraPage() {
   if (user?.hasWalletAccess && user.plan !== 'ultra') {
     return (
         <section className="flex flex-col items-center w-full p-8 text-center">
-            <h1 className="text-4xl font-bold text-white">Solicitação Recebida</h1>
+            <h1 className="text-4xl font-bold text-white">Obrigado! Solicitação Recebida.</h1>
+            {/* --- ALTERAÇÃO 5: Texto atualizado --- */}
             <p className="text-gray-300 mt-4 max-w-2xl">
                 O seu pagamento foi confirmado e a solicitação para a emissão da sua carteira foi registada com sucesso.
                 <br />
-                Enviaremos para o endereço fornecido assim que estiver pronta. Fique atento ao seu email para o código de rastreio.
+                Enviaremos para o endereço fornecido. O prazo de entrega é de <strong>4 a 14 dias úteis</strong>, dependendo do frete escolhido.
+                <br /><br />
+                Fique atento ao seu email para o código de rastreio.
             </p>
+            <p className="text-gray-400 mt-8">
+                A redirecionar para os módulos em 7 segundos...
+            </p>
+            {/* Adicionando um spinner simples */}
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mt-4"></div>
         </section>
     );
   }
@@ -226,7 +237,7 @@ export default function CarteiraPage() {
 
   // Caso 3: Usuário é Ultra OU pagou a taxa (hasWalletAccess=true), mas ainda não pagou frete
   // Mostra o formulário de endereço e frete.
-   if (user?.plan === 'ultra' || (user?.hasWalletAccess && !userLoading)) { // Garante que user não é null
+   if (user?.plan === 'ultra' || (user?.hasWalletAccess && !userLoading)) { 
     return (
         <section className="flex flex-col items-center w-full p-4 md:p-8">
         <div className="text-center mb-10">
@@ -238,7 +249,6 @@ export default function CarteiraPage() {
         </div>
 
         <div className="w-full max-w-2xl bg-gray-800 p-6 md:p-8 rounded-lg shadow-lg">
-            {/* O onSubmit agora chama a função específica para o frete */}
             <form onSubmit={handleSubmitShipping}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="md:col-span-2">
@@ -320,6 +330,6 @@ export default function CarteiraPage() {
     );
   }
 
-  // Fallback caso nenhuma condição seja atendida (segurança)
+  // Fallback
   return <div>Ocorreu um erro ao carregar a página. Tente novamente.</div>;
 }
