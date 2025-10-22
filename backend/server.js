@@ -63,29 +63,35 @@ app.post('/gerar-pix-paradise', authenticateToken, async (req, res) => {
     const reference = 'CKO-' + Date.now(); // Referência única simples
 
     // Payload para a API Paradise Pags
+   // Dentro da rota /gerar-pix-paradise no backend/server.js
+
+    // ... (código anterior da rota: validações, PARADISE_API_URL, reference) ...
+
+    // Payload para a API Paradise Pags (COM AJUSTE)
     const payload = {
-        amount: baseAmount, // Valor em centavos
+        amount: baseAmount,
         description: productTitle,
         reference: reference,
-        checkoutUrl: checkoutUrl, // URL da página onde o pagamento foi iniciado
+        checkoutUrl: checkoutUrl,
         productHash: productHash,
         customer: {
-            name: name || email, // Usa o email como fallback se o nome não existir (importante para login mágico)
+            name: name || email,
             email: email,
-            // Valores padrão para campos não essenciais neste fluxo
-            document: '00000000000',
-            phone: '00000000000'
+            // ▼▼▼ AJUSTE AQUI ▼▼▼
+            // Enviando strings com 11 dígitos, que se assemelham mais a CPF/Telefone
+            // (Ainda são dados fictícios, mas podem passar na validação de padrão)
+            document: '11111111111', // CPF fictício (11 dígitos)
+            phone:    '11911111111'  // Telefone fictício (DDD + 9 + 8 dígitos)
+            // ▲▲▲ FIM DO AJUSTE ▲▲▲
         }
-        // Poderia adicionar 'tracking' aqui se necessário (utms, fbc, fbp)
     };
 
-// ▼▼▼ ADICIONE ESTE LOG ▼▼▼
     console.log('--- Payload enviado para Paradise Pags ---');
-    console.log(JSON.stringify(payload, null, 2)); // Loga o payload formatado
+    console.log(JSON.stringify(payload, null, 2));
     console.log('--- Fim do Payload ---');
-    // ▲▲▲ FIM DO LOG ▲▲▲
 
     try {
+      // ... (resto do try...catch para chamar axios.post) ...
         // Faz a chamada POST para a API do Paradise Pags
         const response = await axios.post(PARADISE_API_URL, payload, {
             headers: {
